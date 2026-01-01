@@ -5,7 +5,14 @@ import sys
 from pathlib import Path
 
 # プロジェクトルートをパスに追加
-sys.path.insert(0, str(Path(__file__).parent.resolve()))
+sys.path.insert(0, str(Path(__file__).parent.parent.resolve()))
+
+# 必要なモジュールをインポート
+from db import Database, Model, DailyStats
+from discord_notifier import DiscordNotifier
+from fetch_openrouter import parse_markdown, normalize_tokens
+from datetime import datetime
+import yaml
 
 # モックデータ
 MOCK_MARKDOWN = """
@@ -22,12 +29,6 @@ def test_main_with_mock():
     """モックデータを使用してメイン処理をテスト"""
     print("Testing main script with mock data...")
     
-    # 必要なモジュールをインポート
-    from db import Database, Model, DailyStats
-    from discord_notifier import DiscordNotifier
-    from datetime import datetime
-    import yaml
-    
     # 設定ファイルの読み込み
     with open("config.yaml", 'r') as f:
         config = yaml.safe_load(f)
@@ -39,44 +40,10 @@ def test_main_with_mock():
         db.init_db()
         print("✓ Database initialized")
         
-        # モックデータのパース（簡易版）
-        models_data = []
-        model_lines = MOCK_MARKDOWN.split('\n')
-        
-        for line in model_lines:
-            if line.startswith('*   ['):
-                # モデル名とURLの抽出
-                name_start = line.find('[') + 1
-                name_end = line.find(']')
-                name = line[name_start:name_end]
-                
-                url_start = line.find('(') + 1
-                url_end = line.find(')')
-                url = line[url_start:url_end]
-                model_id = url.split('openrouter.ai/')[-1]
-                
-                # トークン数の抽出
-                tokens_part = line.split(') ')[-1]
-                tokens_str = tokens_part.split(' tokens')[0]
-                
-                # トークン数の正規化
-                if 'B' in tokens_str:
-                    weekly_tokens = float(tokens_str.replace('B', '')) * 1000
-                elif 'M' in tokens_str:
-                    weekly_tokens = float(tokens_str.replace('M', ''))
-                else:
-                    weekly_tokens = float(tokens_str)
-                
-                models_data.append({
-                    'id': model_id,
-                    'name': name,
-                    'provider': 'Test Provider',
-                    'context_length': 32768,
-                    'description': '',
-                    'weekly_tokens': weekly_tokens,
-                    'prompt_price': 0.0001,
-                    'completion_price': 0.0002
-                })
+        # モックデータのパース（本番コードのparse_markdown関数を使用）
+        import logging
+        logger = logging.getLogger(__name__)
+        models_data = parse_markdown(MOCK_MARKDOWN, logger)
         
         print(f"✓ Parsed {len(models_data)} models from mock data")
         
