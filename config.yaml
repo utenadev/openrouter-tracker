@@ -1,0 +1,30 @@
+# Discord設定
+discord:
+  webhook_url: "YOUR_DISCORD_WEBHOOK_URL_HERE"
+  enabled: true
+
+# データベース設定
+database:
+  path: "models.db"
+
+# API設定
+api:
+  base_url: "https://r.jina.ai/https://openrouter.ai/models?max_price=0"
+  timeout: 30
+  max_retries: 2
+  retry_delay: 5
+
+# ログ設定
+logging:
+  file: "logs/app.log"
+  level: "INFO"
+  max_size_mb: 10
+  backup_count: 5
+
+# 将来的なLLM修正機能（次のフェーズ用）
+llm_parser:
+  enabled: false
+  provider: "openrouter"
+  model: "anthropic/claude-3.5-sonnet"
+  api_key: "YOUR_API_KEY_HERE"
+  fallback_to_manual: true
