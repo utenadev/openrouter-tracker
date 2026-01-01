@@ -1,4 +1,4 @@
-# openrouter-tracker 実装ドキュメント
+# openrouter-tracker 実装ドキュメント (v2)
 
 ## プロジェクト概要
 
@@ -44,7 +44,7 @@ discord:
 
 # データベース設定
 database:
-  path: "/home/USER/openrouter-tracker/models.db"
+  path: "models.db"
 
 # API設定
 api:
@@ -55,7 +55,7 @@ api:
 
 # ログ設定
 logging:
-  file: "/home/USER/openrouter-tracker/logs/app.log"
+  file: "logs/app.log"
   level: "INFO"
   max_size_mb: 10
   backup_count: 5
@@ -76,7 +76,7 @@ llm_parser:
 ```python
 import sqlite3
 from datetime import datetime
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Set
 from dataclasses import dataclass
 
 @dataclass
@@ -201,13 +201,25 @@ class Database:
                 """, (stat.model_id, stat.date, stat.rank, stat.weekly_tokens,
                       stat.prompt_price, stat.completion_price))
 
-    def get_previous_rankings(self, date: str) -> Dict[str, int]:
-        """前日の順位を取得"""
+    def get_latest_rankings_before(self, date_threshold: str) -> Dict[str, int]:
+        """指定日以前の直近のランキングを取得（24時間以上前の比較用）"""
+        # 指定日以前で最も新しい日付を取得
+        latest_date_row = self.conn.execute("""
+            SELECT MAX(date) as max_date
+            FROM daily_stats
+            WHERE date <= ?
+        """, (date_threshold,)).fetchone()
+
+        if not latest_date_row or not latest_date_row['max_date']:
+            return {}
+
+        target_date = latest_date_row['max_date']
+        
         previous_rankings = self.conn.execute("""
             SELECT model_id, rank
             FROM daily_stats
             WHERE date = ?
-        """, (date,)).fetchall()
+        """, (target_date,)).fetchall()
 
         return {row['model_id']: row['rank'] for row in previous_rankings}
 
@@ -226,10 +238,15 @@ class Database:
         """全モデルを取得"""
         rows = self.conn.execute("SELECT * FROM models").fetchall()
         return [Model(**dict(row)) for row in rows]
+    
+    def get_all_model_ids(self) -> Set[str]:
+        """全モデルIDのセットを取得"""
+        rows = self.conn.execute("SELECT id FROM models").fetchall()
+        return {row['id'] for row in rows}
 
     def detect_new_models(self, current_models: List[str]) -> List[str]:
         """新規モデルを検出"""
-        existing_models = {row['id'] for row in self.conn.execute("SELECT id FROM models").fetchall()}
+        existing_models = self.get_all_model_ids()
         new_models = [model_id for model_id in current_models if model_id not in existing_models]
         return new_models
 ```
@@ -267,7 +284,7 @@ class DiscordNotifier:
         }
 
         for i, model in enumerate(models[:5], 1):
-            prev_rank = previous_rankings.get(model['id'], i)
+            prev_rank = previous_rankings.get(model['id'], i) # データがない場合は現在の順位と仮定
             change = prev_rank - i
 
             if change > 0:
@@ -380,7 +397,7 @@ from db import Database, Model, DailyStats
 from discord_notifier import DiscordNotifier
 
 # パターン定義
-MODEL_PATTERN = r'\*   \[(.*?)\]\((https://openrouter\.ai/[^)]+)\)\s+(\d+\.?\d*[MB]?) tokens'
+MODEL_PATTERN = r'\*   \[(.*?)](https://openrouter\.ai/[^)]+)\)\s+(\d+\.?\d*[MB]?) tokens'
 CONTEXT_PATTERN = r'(\d+K?) context'
 PRICE_INPUT_PATTERN = r'\$(\d+\.?\d*)/M input tokens'
 PRICE_OUTPUT_PATTERN = r'\$(\d+\.?\d*)/M output tokens'
@@ -389,6 +406,12 @@ PROVIDER_PATTERN = r'by \[(.*?)\]'
 def setup_logging(config: Dict):
     """ログ設定"""
     log_file = Path(config['logging']['file'])
+    
+    # 絶対パスに解決
+    if not log_file.is_absolute():
+        BASE_DIR = Path(__file__).parent.resolve()
+        log_file = BASE_DIR / log_file
+        
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
     logger = logging.getLogger()
@@ -425,10 +448,16 @@ def load_config(config_path: str = "config.yaml") -> Dict:
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
 
-    # 相対パスを絶対パスに変換
+    # 相対パスを絶対パスに変換（configに書かれたパスが相対パスの場合のみ）
     BASE_DIR = Path(__file__).parent.resolve()
-    config['database']['path'] = str(BASE_DIR / "models.db")
-    config['logging']['file'] = str(BASE_DIR / "logs" / "app.log")
+    
+    db_path = Path(config['database']['path'])
+    if not db_path.is_absolute():
+        config['database']['path'] = str(BASE_DIR / db_path)
+        
+    log_path = Path(config['logging']['file'])
+    if not log_path.is_absolute():
+        config['logging']['file'] = str(BASE_DIR / log_path)
 
     return config
 
@@ -551,10 +580,23 @@ def main():
         # データベース操作
         db_path = Path(config['database']['path'])
         db_path.parent.mkdir(parents=True, exist_ok=True)
-
+        
+        new_models = []
+        
         with Database(str(db_path)) as db:
             # データベース初期化
             db.init_db()
+
+            # 新規モデル検出（Upsert前にチェック）
+            existing_ids = db.get_all_model_ids()
+            current_ids = {m['id'] for m in models_data}
+            new_model_ids = current_ids - existing_ids
+            
+            # 新規モデルの情報を抽出
+            new_models = [m for m in models_data if m['id'] in new_model_ids]
+            
+            if new_models:
+                logger.info(f"Detected {len(new_models)} new models")
 
             # モデル情報を保存
             for model_data in models_data:
@@ -563,7 +605,7 @@ def main():
                     name=model_data['name'],
                     provider=model_data['provider'],
                     context_length=model_data['context_length'],
-                    description=model_data['description'],
+                    description='',
                     created_at=datetime.now().isoformat(),
                     updated_at=datetime.now().isoformat()
                 )
@@ -592,30 +634,37 @@ def main():
             enabled=config['discord']['enabled']
         )
 
-        # 前日の順位を取得
-        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        # 前日の順位を取得 (24時間以上前の直近のデータと比較)
+        # 本日が 2026-01-02 なら、2026-01-01 以前の最新データを取得
+        threshold_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        
         with Database(str(db_path)) as db:
-            previous_rankings = db.get_previous_rankings(yesterday)
+            previous_rankings = db.get_latest_rankings_before(threshold_date)
             top_models = db.get_top_models_by_tokens(today, limit=5)
 
         # トップ5通知
         logger.info("Sending Discord notification...")
         notifier.send_top5_notification(top_models, previous_rankings)
+        
+        # 新規モデル通知
+        if new_models:
+            logger.info("Sending New Models notification...")
+            notifier.send_new_models_notification(new_models)
 
         # サマリー通知
         total_tokens = sum(m['weekly_tokens'] for m in models_data)
-        new_models_count = 0
-
+        
         notifier.send_summary(
             total_models=len(models_data),
             total_tokens=total_tokens,
-            new_models_count=new_models_count
+            new_models_count=len(new_models)
         )
 
         logger.info("Execution completed successfully")
 
     except Exception as e:
         logger.error(f"Error during execution: {e}", exc_info=True)
+        # 通知が有効ならエラー通知を飛ばしても良いが、ここではログ出力にとどめる
         raise
 
 if __name__ == "__main__":
@@ -638,11 +687,17 @@ mkdir -p ~/openrouter-tracker/logs
 # 仮想環境の作成（推奨）
 cd ~/openrouter-tracker
 python3 -m venv venv
-source venv/bin/activate
+
+# .gitignoreの作成
+echo "venv/" > .gitignore
+echo "__pycache__/" >> .gitignore
+echo "*.db" >> .gitignore
+echo "config.yaml" >> .gitignore
+echo "logs/" >> .gitignore
 
 # 依存ライブラリのインストール
-pip install --upgrade pip
-pip install -r requirements.txt
+./venv/bin/pip install --upgrade pip
+./venv/bin/pip install -r requirements.txt
 
 # config.yamlの作成（まだ存在しない場合）
 if [ ! -f config.yaml ]; then
@@ -653,13 +708,13 @@ fi
 chmod +x fetch_openrouter.py
 
 # データベースの初期化
-python3 -c "from db import Database; db = Database('models.db'); db.__enter__(); db.init_db()"
+./venv/bin/python3 -c "from db import Database; db = Database('models.db'); db.__enter__(); db.init_db()"
 
 echo "Setup complete!"
 echo ""
 echo "Next steps:"
 echo "1. Edit config.yaml with your Discord webhook URL"
-echo "2. Run: python3 fetch_openrouter.py"
+echo "2. Run: ./venv/bin/python3 fetch_openrouter.py"
 echo "3. Add to crontab: crontab -e"
 ```
 
@@ -681,16 +736,9 @@ cd ~/openrouter-tracker
 
 ```bash
 cd ~/openrouter-tracker
-pip3 install -r requirements.txt
-```
-
-または、仮想環境を使用する場合：
-
-```bash
-cd ~/openrouter-tracker
+# 仮想環境作成とインストール
 python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+./venv/bin/pip install -r requirements.txt
 ```
 
 ### 3. 設定ファイルの編集
@@ -701,19 +749,15 @@ nano config.yaml
 
 以下の項目を編集：
 - `discord.webhook_url`: 実際のDiscord Webhook URLに置換
-- `database.path`: ユーザー名を含めたフルパスに更新
-- `logging.file`: ユーザー名を含めたフルパスに更新
+- `database.path`: `models.db` (相対パスでOK)
+- `logging.file`: `logs/app.log` (相対パスでOK)
 
 ### 4. 初期実行
 
 ```bash
-# 仮想環境を使用している場合
+# 仮想環境のpythonを使用
 cd ~/openrouter-tracker
-source venv/bin/activate
-python3 fetch_openrouter.py
-
-# または、直接実行
-python3 ~/openrouter-tracker/fetch_openrouter.py
+./venv/bin/python3 fetch_openrouter.py
 ```
 
 ### 5. Cronの設定
@@ -722,13 +766,9 @@ python3 ~/openrouter-tracker/fetch_openrouter.py
 # ユーザーのcrontabを編集
 crontab -e
 
-# 以下を追加（仮想環境を使用する場合）
-0 6 * * * cd /home/USER/openrouter-tracker && /home/USER/openrouter-tracker/venv/bin/python fetch_openrouter.py
-0 18 * * * cd /home/USER/openrouter-tracker && /home/USER/openrouter-tracker/venv/bin/python fetch_openrouter.py
-
-# 仮想環境を使用しない場合
-0 6 * * * /usr/bin/python3 /home/USER/openrouter-tracker/fetch_openrouter.py
-0 18 * * * /usr/bin/python3 /home/USER/openrouter-tracker/fetch_openrouter.py
+# 以下を追加（フルパスで指定）
+0 6 * * * cd /home/USER/openrouter-tracker && /home/USER/openrouter-tracker/venv/bin/python3 fetch_openrouter.py
+0 18 * * * cd /home/USER/openrouter-tracker && /home/USER/openrouter-tracker/venv/bin/python3 fetch_openrouter.py
 ```
 
 ※ `USER` の部分を実際のユーザー名に置換してください。
@@ -741,8 +781,7 @@ crontab -e
 
 ```bash
 cd ~/openrouter-tracker
-source venv/bin/activate
-python3 fetch_openrouter.py
+./venv/bin/python3 fetch_openrouter.py
 ```
 
 ### 自動実行
@@ -757,58 +796,4 @@ Cronにより、毎日 6:00 AM と 6:00 PM に自動実行されます。
 tail -f ~/openrouter-tracker/logs/app.log
 ```
 
----
-
-## 次のフェーズ: LLMパーサーの実装
-
-### 機能概要
-
-r.jina.ai のフォーマット変更に対応するため、LLMを使用してパターンを自動学習・修正する機能。
-
-### 実装予定ファイル
-
-- `llm_parser.py`: LLMを使用したパーサー
-- `patterns.yaml`: 学習したパターンを保存するファイル
-- 更新版 `fetch_openrouter.py`: LLMパーサーを統合
-
-### 処理フロー
-
-1. 通常の正規表現パースを試行
-2. 失敗した場合、LLMを呼び出して新しいパターンを抽出
-3. LLMが抽出したパターンで再度パース
-4. 成功したパターンを `patterns.yaml` に保存
-5. 次回実行時は保存されたパターンを優先使用
-
-### 使用するLLM
-
-デフォルト: `anthropic/claude-3.5-sonnet`（OpenRouter経由）
-
----
-
-## トラブルシューティング
-
-### Discord通知が届かない
-
-1. `config.yaml` の `discord.enabled` を確認
-2. Webhook URLが正しいか確認
-3. ログを確認: `tail -f ~/openrouter-tracker/logs/app.log`
-
-### データ取得に失敗する
-
-1. r.jina.ai サービスが稼働しているか確認
-2. インターネット接続を確認
-3. タイムアウト設定を確認（デフォルト: 30秒）
-
-### Cronが実行されない
-
-1. `crontab -l` でcronエントリを確認
-2. システムログを確認: `grep CRON /var/log/syslog`
-3. パスが正しいか確認
-
----
-
-## Raspberry Pi 3での注意点
-
-- メモリ使用量: 約30MB
-- 実行時間: 約3-5秒
-- ディスク使用量: 約10MB/月
+```
