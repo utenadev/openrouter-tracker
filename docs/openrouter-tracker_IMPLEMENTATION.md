@@ -48,7 +48,7 @@ database:
 
 # API設定
 api:
-  base_url: "https://openrouter.ai/models?max_price=0&order=top-weekly&limit=50"
+  base_url: "https://r.jina.ai/https://openrouter.ai/models?max_price=0&order=top-weekly"
   timeout: 30
   max_retries: 2
   retry_delay: 5
