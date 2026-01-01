@@ -38,6 +38,18 @@
     ```
     必要なパッケージ: `pyyaml`, `requests`。
 
+2.  **環境変数**:
+    テスト実行時や本番実行時に環境変数を使用して設定を上書きできます：
+    *   `DISCORD_WEBHOOK_URL`: Discord Webhook URL（config.yamlの設定より優先）
+    *   `DISCORD_NOTIFIER_DISABLED`: "true"に設定するとDiscord通知を無効化
+
+    例：
+    ```bash
+    export DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/your/webhook"
+    export DISCORD_NOTIFIER_DISABLED="true"
+    python3 fetch_openrouter.py
+    ```
+
 2.  **設定**:
     ルートディレクトリに `config.yaml` ファイルを作成してください。テンプレートについては `docs/openrouter-tracker_IMPLEMENTATION.md` を参照してください。
     *   **重要な設定**:

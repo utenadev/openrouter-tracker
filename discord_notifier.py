@@ -1,17 +1,27 @@
 import logging
+import os
 import time
 from datetime import datetime
 from typing import Dict
 from typing import List
+from typing import Optional
 
 import requests
 
 logger = logging.getLogger(__name__)
 
 class DiscordNotifier:
-    def __init__(self, webhook_url: str, enabled: bool = True):
-        self.webhook_url = webhook_url
-        self.enabled = enabled
+    def __init__(self, webhook_url: Optional[str] = None, enabled: bool = True):
+        # 環境変数が設定されていれば優先する
+        env_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
+        self.webhook_url = env_webhook_url if env_webhook_url else webhook_url
+
+        # 環境変数で無効化もサポート
+        env_disabled = (
+            os.environ.get("DISCORD_NOTIFIER_DISABLED", "false").lower()
+            in ("true", "1", "yes")
+        )
+        self.enabled = not env_disabled and enabled
 
     def send_top5_notification(
         self, models: List[Dict], previous_rankings: Dict[str, int]
