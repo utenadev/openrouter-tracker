@@ -21,11 +21,8 @@ from discord_notifier import DiscordNotifier
 BASE_DIR = Path(__file__).parent.resolve()
 
 # パターン定義(テーブル形式Markdown用)
-# テーブル行パターン
-TABLE_ROW_PATTERN = (
-    r"\|\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|"
-    r"\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|"
-)
+# テーブル行パターン(非貪欲マッチングで長い行に対応)
+TABLE_ROW_PATTERN = r"\|\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|"
 # モデルURLパターン: [Model Name](https://openrouter.ai/provider/model-id)
 MODEL_URL_PATTERN = r"\[(.*?)\]\(https://openrouter\.ai/[^/]+/(.*?)\)"
 
@@ -177,8 +174,8 @@ def parse_markdown(markdown: str, logger: logging.Logger) -> List[Dict]:
     header_line_count = 0
 
     for line in lines:
-        # テーブルの開始を検出(ヘッダー行)
-        if line.startswith("|") and "Model" in line and "Weekly" in line:
+        # テーブルの開始を検出(ヘッダー行) - Model Name & IDまたはModel Nameを含む行
+        if line.startswith("|") and ("Model Name" in line or "Model" in line):
             in_table = True
             header_line_count = 0
             continue
@@ -194,21 +191,17 @@ def parse_markdown(markdown: str, logger: logging.Logger) -> List[Dict]:
             # テーブル行パターンでマッチ
             table_match = re.search(TABLE_ROW_PATTERN, line)
             if not table_match:
+                # デバッグ: マッチしなかった行を表示
+                logger.debug("No match for line: %s", line[:100])
                 continue
 
             # テーブルの各列を抽出
             columns = [col.strip() for col in table_match.groups()]
-            if len(columns) < 6:
+            if len(columns) < 4:
                 continue
 
-            (
-                model_name_col,
-                tokens_col,
-                context_col,
-                input_price_col,
-                output_price_col,
-                provider_col,
-            ) = columns
+            # 実際のデータ形式
+            model_name_col, input_price_col, output_price_col, context_col = columns[:4]
 
             # モデル名とIDを抽出(モデル名にはURLが含まれる)
             model_url_match = re.search(MODEL_URL_PATTERN, model_name_col)
@@ -232,18 +225,30 @@ def parse_markdown(markdown: str, logger: logging.Logger) -> List[Dict]:
             else:
                 clean_name, model_id = model_url_match.groups()
 
-            # プロバイダーを抽出
-            provider = provider_col if provider_col else "Unknown"
+            # バックティックで囲まれたIDを抽出
+            backtick_match = re.search(r"`([^`]+)`", model_name_col)
+            if backtick_match:
+                model_id = backtick_match.group(1)
+
+            # プロバイダーをモデル名から抽出
+            if ":" in clean_name:
+                provider = clean_name.split(":")[0].strip()
+                # モデル名からプロバイダー名を除去
+                clean_name = clean_name.split(":")[1].strip()
+            else:
+                provider = "Unknown"
 
             # コンテキスト長を抽出
-            context_length = normalize_context(context_col) if context_col else 0
+            context_str = context_col.replace(",", "") if context_col else "0"
+            context_length = normalize_context(context_str) if context_str else 0
 
             # 価格を抽出
             input_price = extract_price(input_price_col)
             output_price = extract_price(output_price_col)
 
-            # 週間トークン数を抽出
-            weekly_tokens = normalize_tokens(tokens_col) if tokens_col else 0.0
+            # 周間トークン数はAPIから取得できないため、デフォルト値を設定
+            # 実際の実装では、別の方法で取得する必要があります
+            weekly_tokens = 0.0  # デフォルト値
 
             models.append({
                 "id": model_id,
