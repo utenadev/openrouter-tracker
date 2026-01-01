@@ -106,11 +106,17 @@ def fetch_markdown(config: Dict, logger: logging.Logger) -> str:
     retry_delay = config['api']['retry_delay']
     last_error = None
 
+    # ヘッダーの設定
+    headers = {
+        'User-Agent': config['api']['user_agent']
+    }
+
     for attempt in range(max_retries + 1):
         try:
             response = requests.get(
                 config['api']['base_url'],
-                timeout=config['api']['timeout']
+                timeout=config['api']['timeout'],
+                headers=headers
             )
             response.raise_for_status()
 
@@ -133,35 +139,48 @@ def parse_markdown(markdown: str, logger: logging.Logger) -> List[Dict]:
     """Markdownをパースしてモデル情報を抽出"""
     models = []
 
-    # 各モデルエントリを抽出
-    model_entries = re.findall(MODEL_PATTERN, markdown)
-
-    if not model_entries:
-        logger.error("No models found in markdown data")
-        raise ValueError("Failed to parse models from markdown")
-
-    for i, match in enumerate(model_entries):
-        name, url, tokens = match
+    # 行ごとに処理
+    lines = markdown.split('\n')
+    
+    for line in lines:
+        # モデルエントリを抽出（トークン数が含まれる行のみ）
+        match = re.search(MODEL_PATTERN, line)
+        if not match:
+            continue
+        
+        name, tokens = match.groups()
+        
+        # URLを抽出
+        url_match = re.search(r'\((https://openrouter\.ai/[^)]+)\)', line)
+        if not url_match:
+            continue
+        
+        url = url_match.group(1)
         model_id = url.split('openrouter.ai/')[-1]
-
+        
+        # モデル名からプロバイダー名を抽出（例: "Xiaomi: MiMo-V2-Flash (free)" → "Xiaomi"）
+        if ':' in name:
+            provider = name.split(':')[0].strip()
+            # モデル名からプロバイダー名を除去
+            clean_name = name.split(':')[1].strip()
+        else:
+            provider = "Unknown"
+            clean_name = name
+        
         # コンテキスト長を抽出
-        context_match = re.search(CONTEXT_PATTERN, markdown)
+        context_match = re.search(CONTEXT_PATTERN, line)
         context_length = normalize_context(context_match.group(1)) if context_match else 0
 
-        # プロバイダーを抽出
-        provider_match = re.search(PROVIDER_PATTERN, markdown)
-        provider = provider_match.group(1) if provider_match else "Unknown"
-
         # 価格を抽出
-        input_price_match = re.search(PRICE_INPUT_PATTERN, markdown)
+        input_price_match = re.search(PRICE_INPUT_PATTERN, line)
         input_price = float(input_price_match.group(1)) if input_price_match else 0.0
 
-        output_price_match = re.search(PRICE_OUTPUT_PATTERN, markdown)
+        output_price_match = re.search(PRICE_OUTPUT_PATTERN, line)
         output_price = float(output_price_match.group(1)) if output_price_match else 0.0
 
         models.append({
             'id': model_id,
-            'name': name,
+            'name': clean_name,
             'provider': provider,
             'context_length': context_length,
             'description': '',
@@ -169,6 +188,10 @@ def parse_markdown(markdown: str, logger: logging.Logger) -> List[Dict]:
             'prompt_price': input_price,
             'completion_price': output_price
         })
+
+    if not models:
+        logger.error("No models found in markdown data")
+        raise ValueError("Failed to parse models from markdown")
 
     logger.info(f"Parsed {len(models)} models")
     return models

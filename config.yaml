@@ -9,10 +9,11 @@ database:
 
 # API設定
 api:
-  base_url: "https://r.jina.ai/https://openrouter.ai/models?max_price=0"
+  base_url: "https://openrouter.ai/models?max_price=0&order=top-weekly&limit=50"
   timeout: 30
   max_retries: 2
   retry_delay: 5
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 
 # ログ設定
 logging:
