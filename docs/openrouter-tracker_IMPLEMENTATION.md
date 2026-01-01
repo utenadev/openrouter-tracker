@@ -34,7 +34,38 @@ requests>=2.31.0
 
 ---
 
-### 2. config.yaml
+### 2. 環境変数（dotenvx推奨）
+
+セキュリティと柔軟性のため、環境変数を使用して設定を上書きできます。
+
+**サポートされている環境変数**：
+
+| 変数名 | 説明 | 例 |
+|--------|------|-----|
+| `DISCORD_WEBHOOK_URL` | Discord Webhook URL（config.yamlより優先） | `https://discord.com/api/webhooks/...` |
+| `DISCORD_NOTIFIER_DISABLED` | 通知を無効化（"true"で無効） | `"false"` |
+| `DATABASE_PATH` | データベースパス（オプショナル） | `"./models.db"` |
+| `LOG_LEVEL` | ログレベル（オプショナル） | `"INFO"` |
+| `API_BASE_URL` | APIベースURL（オプショナル） | `"https://r.jina.ai/..."` |
+| `API_TIMEOUT` | APIタイムアウト（オプショナル） | `30` |
+
+**使用方法**：
+
+```bash
+# .env.exampleから.envを作成
+cp .env.example .env
+
+# .envファイルを編集
+nano .env
+
+# dotenvxを使用して実行
+dotenvx up
+dotenvx exec "python3 fetch_openrouter.py"
+```
+
+### 3. config.yaml
+
+環境変数が設定されていない場合に使用されるデフォルト設定。
 
 ```yaml
 # Discord設定
@@ -783,15 +814,40 @@ python3 -m venv venv
 ./venv/bin/pip install -r requirements.txt
 ```
 
-### 3. 設定ファイルの編集
+### 3. 環境変数の設定（推奨）
+
+セキュリティのため、環境変数を使用して機密情報を管理します：
+
+```bash
+# .env.exampleから.envを作成
+cp .env.example .env
+
+# .envファイルを編集（nanoまたはお好みのエディタ）
+nano .env
+```
+
+`.env`ファイルで以下を設定（コメントを外して値を入力）：
+```env
+# Discord Webhook URL（必須）
+DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/your/webhook/url"
+
+# その他の設定（オプショナル）
+# DISCORD_NOTIFIER_DISABLED="false"
+# DATABASE_PATH="./models.db"
+```
+
+### 4. 設定ファイルの編集（オプショナル）
+
+環境変数でカバーされていない設定はconfig.yamlで編集：
 
 ```bash
 nano config.yaml
 ```
 
 以下の項目を編集：
-- `discord.webhook_url`: 実際のDiscord Webhook URLに置換
+- `discord.webhook_url`: 環境変数を使用していない場合に設定
 - `database.path`: `models.db` (相対パスでOK)
+- その他のAPI設定など
 - `logging.file`: `logs/app.log` (相対パスでOK)
 
 ### 4. 初期実行
@@ -819,18 +875,44 @@ crontab -e
 
 ## 実行方法
 
-### 手動実行
+### 手動実行（dotenvx推奨）
 
 ```bash
 cd ~/openrouter-tracker
+
+# 環境変数をロードして実行
+dotenvx up
+dotenvx exec "python3 fetch_openrouter.py"
+
+# または直接実行（環境変数が既に設定されている場合）
 ./venv/bin/python3 fetch_openrouter.py
 ```
+
+**注意**: `dotenvx up` は環境変数を現在のシェルにロードします。新しいターミナルセッションでは再度実行が必要です。
 
 ### 自動実行
 
 Cronにより、毎日 6:00 AM と 6:00 PM に自動実行されます。
 
 ---
+
+## テストの実行
+
+### テストスクリプトの実行
+
+```bash
+cd ~/openrouter-tracker
+
+# 環境変数をロードしてテストを実行
+dotenvx up
+dotenvx exec "python3 tests/test_main_with_mock.py"
+
+# その他のテストスクリプト
+dotenvx exec "python3 tests/test_script.py"
+dotenvx exec "python3 tests/test_error_handling.py"
+```
+
+**注意**: テスト実行時には `DISCORD_NOTIFIER_DISABLED="true"` を設定することを推奨します。
 
 ## ログの確認
 
