@@ -54,7 +54,7 @@ class TestErrorHandling(unittest.TestCase):
         mock_get.return_value = mock_response
         
         # エラーが発生することを確認
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(RuntimeError) as context:
             fetch_markdown(self.config, self.logger)
         
         # エラーメッセージを確認
