@@ -42,9 +42,33 @@ source venv/bin/activate  # Linux/Mac
 pip install -r requirements.txt
 ```
 
-### 3. Edit Configuration File
+### 3. Set Up Environment Variables (Optional but Recommended)
 
-Edit `config.yaml` to set your Discord Webhook URL.
+For better security and flexibility, use environment variables with dotenvx:
+
+1. Copy the example file:
+```bash
+cp .env.example .env
+```
+
+2. Edit `.env` and uncomment/modify the variables you need:
+```bash
+# For Discord webhook
+DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/your/webhook/url"
+
+# To disable notifications during testing
+DISCORD_NOTIFIER_DISABLED="false"
+```
+
+3. Use dotenvx to run the application:
+```bash
+dotenvx up  # Load environment variables
+dotenvx exec "python3 fetch_openrouter.py"  # Run with loaded variables
+```
+
+### 4. Edit Configuration File
+
+Edit `config.yaml` to set your Discord Webhook URL (if not using environment variables).
 
 ```yaml
 # Discord settings

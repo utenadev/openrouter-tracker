@@ -38,12 +38,27 @@
     ```
     必要なパッケージ: `pyyaml`, `requests`。
 
-2.  **環境変数**:
-    テスト実行時や本番実行時に環境変数を使用して設定を上書きできます：
+2.  **環境変数（dotenvx推奨）**:
+    セキュリティと柔軟性のため、dotenvxを使用して環境変数を管理することを推奨します：
+
+    ```bash
+    # .env.exampleから.envを作成して編集
+    cp .env.example .env
+    # .envファイルを編集して必要な変数を設定
+    
+    # dotenvxを使用して実行
+    dotenvx up  # 環境変数をロード
+    dotenvx exec "python3 fetch_openrouter.py"  # 環境変数を使用して実行
+    ```
+
+    サポートされている環境変数：
     *   `DISCORD_WEBHOOK_URL`: Discord Webhook URL（config.yamlの設定より優先）
     *   `DISCORD_NOTIFIER_DISABLED`: "true"に設定するとDiscord通知を無効化
+    *   `DATABASE_PATH`: データベースパス（オプショナル）
+    *   `LOG_LEVEL`: ログレベル（オプショナル）
+    *   `API_*`：API設定（オプショナル）
 
-    例：
+    直接exportでも使用可能：
     ```bash
     export DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/your/webhook"
     export DISCORD_NOTIFIER_DISABLED="true"
