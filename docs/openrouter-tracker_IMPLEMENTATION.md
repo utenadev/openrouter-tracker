@@ -104,7 +104,8 @@ class Database:
         self.conn = None
 
     def __enter__(self):
-        self.conn = sqlite3.connect(self.db_path)
+        self.conn = sqlite3.connect(self.db_path, timeout=30.0)
+        self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.row_factory = sqlite3.Row
         return self
 
@@ -371,11 +372,20 @@ class DiscordNotifier:
         payload = {"embeds": [embed]}
 
         try:
+            time.sleep(1)  # レート制限対策
             response = requests.post(self.webhook_url, json=payload, timeout=10)
             response.raise_for_status()
             logger.info("Discord notification sent successfully")
         except Exception as e:
             logger.error(f"Failed to send Discord notification: {e}")
+            # リトライロジックを追加
+            time.sleep(2)
+            try:
+                response = requests.post(self.webhook_url, json=payload, timeout=10)
+                response.raise_for_status()
+                logger.info("Discord notification sent successfully on retry")
+            except Exception as e:
+                logger.error(f"Failed to send Discord notification on retry: {e}")
 ```
 
 ---
@@ -395,6 +405,9 @@ from pathlib import Path
 from typing import List, Dict
 from db import Database, Model, DailyStats
 from discord_notifier import DiscordNotifier
+
+# 定数定義
+BASE_DIR = Path(__file__).parent.resolve()
 
 # パターン定義
 MODEL_PATTERN = r'\*   \[(.*?)](https://openrouter\.ai/[^)]+)\)\s+(\d+\.?\d*[MB]?) tokens'
@@ -445,12 +458,13 @@ def setup_logging(config: Dict):
 
 def load_config(config_path: str = "config.yaml") -> Dict:
     """設定ファイルの読み込み"""
-    with open(config_path, 'r') as f:
+    # 絶対パスでconfigファイルを読み込む
+    abs_config_path = BASE_DIR / config_path
+    
+    with open(abs_config_path, 'r') as f:
         config = yaml.safe_load(f)
 
     # 相対パスを絶対パスに変換（configに書かれたパスが相対パスの場合のみ）
-    BASE_DIR = Path(__file__).parent.resolve()
-    
     db_path = Path(config['database']['path'])
     if not db_path.is_absolute():
         config['database']['path'] = str(BASE_DIR / db_path)
@@ -659,6 +673,10 @@ def main():
             total_tokens=total_tokens,
             new_models_count=len(new_models)
         )
+        
+        # エラー通知（オプション）
+        # 通知が有効な場合、エラー発生時にも通知を送信する
+        # try-exceptブロックでラップして、エラー時にも通知を送信する
 
         logger.info("Execution completed successfully")
 

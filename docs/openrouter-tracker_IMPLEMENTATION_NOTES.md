@@ -28,6 +28,10 @@ def load_config(config_path="config.yaml"):
         config['database']['path'] = str(BASE_DIR / config['database']['path'])
 ```
 
+**実装状況**: ✅ 実装済み
+- `BASE_DIR`定数を追加
+- `load_config`関数で絶対パスを使用
+
 ---
 
 ### 2. ランキング比較のロジック (24時間ルール)
@@ -76,6 +80,8 @@ def __enter__(self):
     self.conn.row_factory = sqlite3.Row
     return self
 ```
+
+**実装状況**: ✅ 実装済み
 
 ---
 
@@ -127,6 +133,10 @@ if logger.isEnabledFor(logging.DEBUG):
 Discord Webhookは短時間に送りすぎると制限がかかります。
 - `Top 5`, `新規モデル`, `サマリー` をできるだけ一つの埋め込みメッセージ（Embed）にまとめるか、送信間に `time.sleep(1)` を入れることを検討してください。
 
+**実装状況**: ✅ 実装済み
+- レート制限対策として`time.sleep(1)`を追加
+- リトライロジックを追加
+
 ---
 
 ## トラブルシューティング
@@ -136,6 +146,7 @@ Discord Webhookは短時間に送りすぎると制限がかかります。
 | ランキング変動が常に 0 | 比較対象の古いデータがない | 24時間以上前のデータがDBにあるか確認 |
 | `ImportError` | 仮想環境が未適用 | `venv/bin/python3` を使用しているか確認 |
 | `locked` エラー | 重複起動 | WALモードの確認と、PIDファイルによる二重起動防止を検討 |
+| Discord通知失敗 | レート制限またはネットワークエラー | リトライロジックの確認と、レート制限対策の実施 |
 
 ---
 
