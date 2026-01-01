@@ -20,15 +20,15 @@ from db import Model
 from discord_notifier import DiscordNotifier
 from fetch_openrouter import parse_markdown
 
-# モックデータ
+# モックデータ(テーブル形式)
 MOCK_MARKDOWN = """
-*   [Mistral 7B](https://openrouter.ai/mistralai/Mistral-7B-Instruct-v0.1) 1.2B tokens
-*   [Llama 2 7B](https://openrouter.ai/meta-llama/Llama-2-7b-chat) 950M tokens
-*   [Gemini Pro](https://openrouter.ai/google/gemini-pro) 800M tokens
-*   [Claude 3 Haiku](https://openrouter.ai/anthropic/claude-3-haiku) 700M tokens
-*   [GPT-3.5 Turbo](https://openrouter.ai/openai/gpt-3.5-turbo) 600M tokens
-
-32K context, $0.0001/M input tokens, $0.0002/M output tokens by [Mistral AI]
+| Model Name | Weekly Tokens | Context | Input Price | Output Price | Provider |
+|------------|---------------|---------|-------------|--------------|----------|
+| [Mistral 7B](https://openrouter.ai/mistralai/Mistral-7B-Instruct-v0.1) | 1.2B | 32K | $0.0001/M | $0.0002/M | Mistral AI |
+| [Llama 2 7B](https://openrouter.ai/meta-llama/Llama-2-7b-chat) | 950M | 16K | $0.0001/M | $0.0002/M | Meta |
+| [Gemini Pro](https://openrouter.ai/google/gemini-pro) | 800M | 32K | $0.0001/M | $0.0002/M | Google |
+| [Claude 3 Haiku](https://openrouter.ai/anthropic/claude-3-haiku) | 700M | 200K | $0.0001/M | $0.0002/M | Anthropic |
+| [GPT-3.5 Turbo](https://openrouter.ai/openai/gpt-3.5-turbo) | 600M | 16K | $0.0001/M | $0.0002/M | OpenAI |
 """
 
 def test_main_with_mock():

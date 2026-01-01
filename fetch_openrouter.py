@@ -20,15 +20,14 @@ from discord_notifier import DiscordNotifier
 # 定数定義
 BASE_DIR = Path(__file__).parent.resolve()
 
-# パターン定義
-MODEL_PATTERN = (
-    r"\*   \[(.*?)\]\(https://openrouter\.ai/[^)]+\)"
-    r"\s+(\d+\.?\d*[MB]?) tokens"
+# パターン定義(テーブル形式Markdown用)
+# テーブル行パターン
+TABLE_ROW_PATTERN = (
+    r"\|\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|"
+    r"\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|"
 )
-CONTEXT_PATTERN = r"(\d+K?) context"
-PRICE_INPUT_PATTERN = r"\$(\d+\.?\d*)/M input tokens"
-PRICE_OUTPUT_PATTERN = r"\$(\d+\.?\d*)/M output tokens"
-PROVIDER_PATTERN = r"by \[(.*?)\]"
+# モデルURLパターン: [Model Name](https://openrouter.ai/provider/model-id)
+MODEL_URL_PATTERN = r"\[(.*?)\]\(https://openrouter\.ai/[^/]+/(.*?)\)"
 
 def setup_logging(config: Dict):
     """ログ設定"""
@@ -109,6 +108,22 @@ def normalize_context(context_str: str) -> int:
     else:
         return int(context_str)
 
+def extract_price(price_str: str) -> float:
+    """価格文字列から数値を抽出(例: "$0.0001/M" → 0.0001)"""
+    if not price_str:
+        return 0.0
+
+    price_str = price_str.strip()
+    # $記号を削除
+    price_str = price_str.replace("$", "")
+    # /Mを削除
+    price_str = price_str.replace("/M", "")
+
+    try:
+        return float(price_str)
+    except ValueError:
+        return 0.0
+
 def fetch_markdown(config: Dict, logger: logging.Logger) -> str:
     """r.jina.aiからMarkdownデータを取得"""
     max_retries = config["api"]["max_retries"]
@@ -151,67 +166,99 @@ def fetch_markdown(config: Dict, logger: logging.Logger) -> str:
                 raise RuntimeError(error_msg) from last_error
 
 def parse_markdown(markdown: str, logger: logging.Logger) -> List[Dict]:
-    """Markdownをパースしてモデル情報を抽出"""
+    """テーブル形式Markdownをパースしてモデル情報を抽出"""
     models = []
 
     # 行ごとに処理
     lines = markdown.split("\n")
 
+    # テーブルヘッダーをスキップ
+    in_table = False
+    header_line_count = 0
+
     for line in lines:
-        # モデルエントリを抽出(トークン数が含まれる行のみ)
-        match = re.search(MODEL_PATTERN, line)
-        if not match:
+        # テーブルの開始を検出(ヘッダー行)
+        if line.startswith("|") and "Model" in line and "Weekly" in line:
+            in_table = True
+            header_line_count = 0
             continue
 
-        name, tokens = match.groups()
+        # テーブルヘッダーのセパレーター行をスキップ
+        if in_table and header_line_count == 0:
+            if line.startswith("|") and "-" in line:
+                header_line_count = 1
+                continue
 
-        # URLを抽出
-        url_match = re.search(r"\((https://openrouter\.ai/[^)]+)\)", line)
-        if not url_match:
-            continue
+        # テーブルデータ行を処理
+        if in_table and line.startswith("|"):
+            # テーブル行パターンでマッチ
+            table_match = re.search(TABLE_ROW_PATTERN, line)
+            if not table_match:
+                continue
 
-        url = url_match.group(1)
-        model_id = url.split("openrouter.ai/")[-1]
+            # テーブルの各列を抽出
+            columns = [col.strip() for col in table_match.groups()]
+            if len(columns) < 6:
+                continue
 
-        # モデル名からプロバイダー名を抽出
-        # 例: "Xiaomi: MiMo-V2-Flash (free)" → "Xiaomi"
-        if ":" in name:
-            provider = name.split(":")[0].strip()
-            # モデル名からプロバイダー名を除去
-            clean_name = name.split(":")[1].strip()
-        else:
-            provider = "Unknown"
-            clean_name = name
+            (
+                model_name_col,
+                tokens_col,
+                context_col,
+                input_price_col,
+                output_price_col,
+                provider_col,
+            ) = columns
 
-        # コンテキスト長を抽出
-        context_match = re.search(CONTEXT_PATTERN, line)
-        context_length = (
-            normalize_context(context_match.group(1))
-            if context_match
-            else 0
-        )
+            # モデル名とIDを抽出(モデル名にはURLが含まれる)
+            model_url_match = re.search(MODEL_URL_PATTERN, model_name_col)
+            if not model_url_match:
+                # URLが直接の場合
+                url_match = re.search(
+                    r"https://openrouter\.ai/[^/]+/(.*?)",
+                    model_name_col
+                )
+                if url_match:
+                    model_id = url_match.group(1)
+                    # モデル名からURLを除去
+                    clean_name = re.sub(
+                        r"https://openrouter\.ai/[^/]+/.*?\s*",
+                        "",
+                        model_name_col
+                    ).strip()
+                else:
+                    # URLがない場合はスキップ
+                    continue
+            else:
+                clean_name, model_id = model_url_match.groups()
 
-        # 価格を抽出
-        input_price_match = re.search(PRICE_INPUT_PATTERN, line)
-        input_price = float(input_price_match.group(1)) if input_price_match else 0.0
+            # プロバイダーを抽出
+            provider = provider_col if provider_col else "Unknown"
 
-        output_price_match = re.search(PRICE_OUTPUT_PATTERN, line)
-        output_price = float(output_price_match.group(1)) if output_price_match else 0.0
+            # コンテキスト長を抽出
+            context_length = normalize_context(context_col) if context_col else 0
 
-        models.append({
-            "id": model_id,
-            "name": clean_name,
-            "provider": provider,
-            "context_length": context_length,
-            "description": "",
-            "weekly_tokens": normalize_tokens(tokens),
-            "prompt_price": input_price,
-            "completion_price": output_price
-        })
+            # 価格を抽出
+            input_price = extract_price(input_price_col)
+            output_price = extract_price(output_price_col)
+
+            # 週間トークン数を抽出
+            weekly_tokens = normalize_tokens(tokens_col) if tokens_col else 0.0
+
+            models.append({
+                "id": model_id,
+                "name": clean_name,
+                "provider": provider,
+                "context_length": context_length,
+                "description": "",
+                "weekly_tokens": weekly_tokens,
+                "prompt_price": input_price,
+                "completion_price": output_price
+            })
 
     if not models:
-        logger.error("No models found in markdown data")
-        error_msg = "Failed to parse models from markdown"
+        logger.error("No models found in table markdown data")
+        error_msg = "Failed to parse models from table markdown"
         raise ValueError(error_msg)
 
     logger.info("Parsed %d models", len(models))

@@ -10,13 +10,14 @@ OpenRouter Tracker fetches data from OpenRouter (via `r.jina.ai`), stores it in 
 
 ## Features
 
-* **Data Fetching**: Scrapes model data including weekly token usage, context length, and pricing.
+* **Data Fetching**: Scrapes model data from OpenRouter's table format including weekly token usage, context length, and pricing.
 * **Database**: Stores model information and daily statistics in SQLite (`models.db`).
 * **Notifications**: Sends Discord notifications for:
   * Top 5 models by weekly token usage.
   * New model additions.
   * Daily summaries.
 * **Logging**: Detailed logging with rotation support.
+* **Table Format Support**: Parses OpenRouter's new table-formatted markdown data.
 
 ## Requirements
 

@@ -4,6 +4,9 @@
 
 OpenRouterの無料モデルの週間トークン使用量とランキングを追跡し、毎日2回（6:00 AM, 6:00 PM）にDiscordへ通知するシステム。
 
+**データソース**: OpenRouterのテーブル形式Markdown (`fmt=table` パラメータ使用)
+=======
+
 ---
 
 ## ディレクトリ構成
@@ -77,15 +80,17 @@ discord:
 database:
   path: "models.db"
 
-# API設定
+# API設定（テーブル形式対応）
 api:
-  base_url: "https://r.jina.ai/https://openrouter.ai/models?max_price=0&order=top-weekly"
+  base_url: "https://r.jina.ai/https://openrouter.ai/models?fmt=table&max_price=0&order=top-weekly"
   timeout: 30
   max_retries: 2
   retry_delay: 5
   user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 
 # ログ設定
+
+**注意**: `fmt=table` パラメータにより、OpenRouterからテーブル形式のMarkdownデータを取得します。
 logging:
   file: "logs/app.log"
   level: "INFO"

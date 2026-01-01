@@ -59,9 +59,10 @@ select = [
 # Allow unused variables when underscore-prefixed.
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
-# Ignore module level import errors for test files
+# Ignore module level import errors and complexity for test files
 [lint.per-file-ignores]
-"tests/*" = ["E402"]
+"tests/*" = ["E402", "E501"]
+"fetch_openrouter.py" = ["C901"]
 
 # Ignore shadowing of builtin names for dataclass fields
 [lint.flake8-builtins]
