@@ -1,7 +1,9 @@
 import sqlite3
-from datetime import datetime
-from typing import List, Dict, Optional, Set
 from dataclasses import dataclass
+from typing import Dict
+from typing import List
+from typing import Set
+
 
 @dataclass
 class Model:
@@ -89,7 +91,8 @@ class Database:
     def upsert_model(self, model: Model):
         """モデル情報の更新または新規追加"""
         with self.conn:
-            cursor = self.conn.execute("""
+            cursor = self.conn.execute(
+                """
                 INSERT INTO models (id, name, provider, context_length, description)
                 VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
@@ -98,7 +101,15 @@ class Database:
                     context_length = excluded.context_length,
                     description = excluded.description,
                     updated_at = CURRENT_TIMESTAMP
-            """, (model.id, model.name, model.provider, model.context_length, model.description))
+                """,
+                (
+                    model.id,
+                    model.name,
+                    model.provider,
+                    model.context_length,
+                    model.description
+                )
+            )
 
             # 新規追加の場合、履歴に記録
             if cursor.rowcount > 0 and cursor.lastrowid > 0:
@@ -115,19 +126,27 @@ class Database:
 
     def save_daily_stats(self, stats: List[DailyStats]):
         """日次統計を保存"""
-        today = datetime.now().strftime('%Y-%m-%d')
-
         with self.conn:
             for stat in stats:
-                self.conn.execute("""
+                self.conn.execute(
+                    """
                     INSERT OR REPLACE INTO daily_stats
-                    (model_id, date, rank, weekly_tokens, prompt_price, completion_price)
+                    (model_id, date, rank, weekly_tokens,
+                     prompt_price, completion_price)
                     VALUES (?, ?, ?, ?, ?, ?)
-                """, (stat.model_id, stat.date, stat.rank, stat.weekly_tokens,
-                      stat.prompt_price, stat.completion_price))
+                    """,
+                    (
+                        stat.model_id,
+                        stat.date,
+                        stat.rank,
+                        stat.weekly_tokens,
+                        stat.prompt_price,
+                        stat.completion_price
+                    )
+                )
 
     def get_latest_rankings_before(self, date_threshold: str) -> Dict[str, int]:
-        """指定日以前の直近のランキングを取得（24時間以上前の比較用）"""
+        """指定日以前の直近のランキングを取得(24時間以上前の比較用)"""
         # 指定日以前で最も新しい日付を取得
         latest_date_row = self.conn.execute("""
             SELECT MAX(date) as max_date
@@ -135,18 +154,18 @@ class Database:
             WHERE date <= ?
         """, (date_threshold,)).fetchone()
 
-        if not latest_date_row or not latest_date_row['max_date']:
+        if not latest_date_row or not latest_date_row["max_date"]:
             return {}
 
-        target_date = latest_date_row['max_date']
-        
+        target_date = latest_date_row["max_date"]
+
         previous_rankings = self.conn.execute("""
             SELECT model_id, rank
             FROM daily_stats
             WHERE date = ?
         """, (target_date,)).fetchall()
 
-        return {row['model_id']: row['rank'] for row in previous_rankings}
+        return {row["model_id"]: row["rank"] for row in previous_rankings}
 
     def get_top_models_by_tokens(self, date: str, limit: int = 5) -> List[Dict]:
         """指定日のトークン数トップNモデルを取得"""
@@ -163,14 +182,17 @@ class Database:
         """全モデルを取得"""
         rows = self.conn.execute("SELECT * FROM models").fetchall()
         return [Model(**dict(row)) for row in rows]
-    
+
     def get_all_model_ids(self) -> Set[str]:
         """全モデルIDのセットを取得"""
         rows = self.conn.execute("SELECT id FROM models").fetchall()
-        return {row['id'] for row in rows}
+        return {row["id"] for row in rows}
 
     def detect_new_models(self, current_models: List[str]) -> List[str]:
         """新規モデルを検出"""
         existing_models = self.get_all_model_ids()
-        new_models = [model_id for model_id in current_models if model_id not in existing_models]
+        new_models = [
+            model_id for model_id in current_models
+            if model_id not in existing_models
+        ]
         return new_models
