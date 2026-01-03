@@ -9,9 +9,7 @@ with open("config.yaml") as f:
     config = yaml.safe_load(f)
 
 # ヘッダーの設定
-headers = {
-    "User-Agent": config["api"]["user_agent"]
-}
+headers = {"User-Agent": config["api"]["user_agent"]}
 
 # 複数のlimit値でテスト
 limit_values = [10, 20, 30, 50, 100]
@@ -23,16 +21,15 @@ for limit in limit_values:
     url = f"https://openrouter.ai/models?max_price=0&order=top-weekly&limit={limit}"
 
     try:
-        response = requests.get(
-            url,
-            timeout=config["api"]["timeout"],
-            headers=headers
-        )
+        response = requests.get(url, timeout=config["api"]["timeout"], headers=headers)
         response.raise_for_status()
 
         # モデル数のカウント
         import re
-        MODEL_PATTERN = r"\*   \[(.*?)\]\(https://openrouter\.ai/[^)]+\)\s+(\d+\.?\d*[MB]?) tokens"
+
+        MODEL_PATTERN = (
+            r"\*   \[(.*?)\]\(https://openrouter\.ai/[^)]+\)\s+(\d+\.?\d*[MB]?) tokens"
+        )
         model_entries = re.findall(MODEL_PATTERN, response.text)
 
         print(f"  ✓ Success: {len(model_entries)} models found")

@@ -2,31 +2,47 @@ import logging
 import os
 import time
 from datetime import datetime
-from typing import Dict
-from typing import List
-from typing import Optional
+from typing import TypedDict
 
 import requests
 
 logger = logging.getLogger(__name__)
 
+
+class ModelRanking(TypedDict):
+    id: str
+    name: str
+    provider: str
+    context_length: int
+    weekly_tokens: float
+    rank: int
+
+
+class NewModel(TypedDict):
+    id: str
+    name: str
+    provider: str
+    context_length: int
+
+
 class DiscordNotifier:
-    def __init__(self, webhook_url: Optional[str] = None, enabled: bool = True):
-        # 環境変数が設定されていれば優先する
+    def __init__(self, webhook_url: str | None = None, enabled: bool = True):
+        # Prioritize environment variable if set
         env_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
         self.webhook_url = env_webhook_url if env_webhook_url else webhook_url
 
-        # 環境変数で無効化もサポート
-        env_disabled = (
-            os.environ.get("DISCORD_NOTIFIER_DISABLED", "false").lower()
-            in ("true", "1", "yes")
+        # Also support disabling via environment variable
+        env_disabled = os.environ.get("DISCORD_NOTIFIER_DISABLED", "false").lower() in (
+            "true",
+            "1",
+            "yes",
         )
         self.enabled = not env_disabled and enabled
 
     def send_top5_notification(
-        self, models: List[Dict], previous_rankings: Dict[str, int]
+        self, models: list[dict], previous_rankings: dict[str, int]
     ):
-        """トップ5モデルの通知を送信"""
+        """Send top 5 models notification"""
         if not self.enabled:
             logger.info("Discord notifications are disabled")
             return
@@ -34,16 +50,16 @@ class DiscordNotifier:
         today = datetime.now().strftime("%Y-%m-%d")
 
         embed = {
-            "title": "📊 OpenRouter 無料モデル 週間ランキング Top 5",
+            "title": "📊 OpenRouter Free Model Weekly Rankings Top 5",
             "description": f"📅 {today}",
             "color": 0x5865F2,
-            "fields": []
+            "fields": [],
         }
 
         for i, model in enumerate(models[:5], 1):
             prev_rank = previous_rankings.get(
                 model["id"], i
-            )  # データがない場合は現在の順位と仮定
+            )  # Assume current rank if no data
             change = prev_rank - i
 
             if change > 0:
@@ -56,48 +72,48 @@ class DiscordNotifier:
                 change_emoji = "➡️"
                 change_text = f"#{i}"
 
-            # トークン数をフォーマット
+            # Format token count
             weekly_tokens = model["weekly_tokens"]
             if weekly_tokens >= 1000:
-                tokens_str = f"{weekly_tokens/1000:.2f}B"
+                tokens_str = f"{weekly_tokens / 1000:.2f}B"
             else:
                 tokens_str = f"{weekly_tokens:.1f}M"
 
-            # コンテキスト長をフォーマット
+            # Format context length
             context = model["context_length"]
             if context >= 1024:
-                context_str = f"{context//1024}K"
+                context_str = f"{context // 1024}K"
             else:
                 context_str = str(context)
 
             field = {
                 "name": f"{i}. {model['name']}",
-                "value": f"🔸 週間トークン: {tokens_str}\n"
-                        f"📈 前日順位: {change_text} {change_emoji}\n"
-                        f"📏 コンテキスト: {context_str}",
-                "inline": False
+                "value": f"🔸 Weekly Tokens: {tokens_str}\n"
+                f"📈 Previous Rank: {change_text} {change_emoji}\n"
+                f"📏 Context: {context_str}",
+                "inline": False,
             }
             embed["fields"].append(field)
 
         self.send_embed(embed)
 
-    def send_new_models_notification(self, new_models: List[Dict]):
-        """新規追加モデルの通知"""
+    def send_new_models_notification(self, new_models: list[dict]):
+        """Send new model addition notification"""
         if not self.enabled or not new_models:
             return
 
         embed = {
-            "title": "🆕 新しいモデルが追加されました",
+            "title": "🆕 New models have been added",
             "color": 0x00FF00,
-            "fields": []
+            "fields": [],
         }
 
         for model in new_models:
             field = {
                 "name": model["name"],
-                "value": f"プロバイダー: {model['provider']}\n"
-                        f"コンテキスト: {model['context_length']:,}",
-                "inline": False
+                "value": f"Provider: {model['provider']}\n"
+                f"Context: {model['context_length']:,}",
+                "inline": False,
             }
             embed["fields"].append(field)
 
@@ -106,51 +122,43 @@ class DiscordNotifier:
     def send_summary(
         self, total_models: int, total_tokens: float, new_models_count: int
     ):
-        """統計サマリーの通知"""
+        """Send statistical summary notification"""
         if not self.enabled:
             return
 
         if total_tokens >= 1000:
-            tokens_str = f"{total_tokens/1000:.2f}B"
+            tokens_str = f"{total_tokens / 1000:.2f}B"
         else:
             tokens_str = f"{total_tokens:.1f}M"
 
         embed = {
-            "title": "📊 統計サマリー",
+            "title": "📊 Statistical Summary",
             "color": 0x1E88E5,
             "fields": [
+                {"name": "Total Models", "value": str(total_models), "inline": True},
+                {"name": "Total Weekly Tokens", "value": tokens_str, "inline": True},
                 {
-                    "name": "総モデル数",
-                    "value": str(total_models),
-                    "inline": True
-                },
-                {
-                    "name": "今週の総トークン",
-                    "value": tokens_str,
-                    "inline": True
-                },
-                {
-                    "name": "追加されたモデル",
+                    "name": "Added Models",
                     "value": str(new_models_count),
-                    "inline": True
-                }
-            ]
+                    "inline": True,
+                },
+            ],
         }
 
         self.send_embed(embed)
 
-    def send_embed(self, embed: Dict):
-        """埋め込みメッセージを送信"""
+    def send_embed(self, embed: dict):
+        """Send embed message"""
         payload = {"embeds": [embed]}
 
         try:
-            time.sleep(1)  # レート制限対策
+            time.sleep(1)  # Rate limit protection
             response = requests.post(self.webhook_url, json=payload, timeout=10)
             response.raise_for_status()
             logger.info("Discord notification sent successfully")
         except Exception as e:
             logger.error("Failed to send Discord notification: %s", e)
-            # リトライロジックを追加
+            # Add retry logic
             time.sleep(2)
             try:
                 response = requests.post(self.webhook_url, json=payload, timeout=10)
@@ -158,3 +166,4 @@ class DiscordNotifier:
                 logger.info("Discord notification sent successfully on retry")
             except Exception as e:
                 logger.error("Failed to send Discord notification on retry: %s", e)
+                raise

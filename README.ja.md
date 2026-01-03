@@ -20,7 +20,7 @@ OpenRouter Trackerは、OpenRouterから（`r.jina.ai`経由で）データを�
 
 ## 必要条件
 
-* Python 3.8以上
+* Python 3.11以上
 * SQLite 3
 * Discord Webhook URL
 

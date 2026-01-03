@@ -3,8 +3,6 @@
 
 import json
 from pathlib import Path
-from typing import Dict
-from typing import List
 
 import requests
 import yaml
@@ -12,7 +10,8 @@ import yaml
 # 定数定義
 BASE_DIR = Path(__file__).parent.resolve()
 
-def load_config(config_path: str = "config.yaml") -> Dict:
+
+def load_config(config_path: str = "config.yaml") -> dict:
     """設定ファイルの読み込み"""
     abs_config_path = BASE_DIR / config_path
 
@@ -21,24 +20,18 @@ def load_config(config_path: str = "config.yaml") -> Dict:
 
     return config
 
-def fetch_json_data(config: Dict) -> Dict:
+
+def fetch_json_data(config: dict) -> dict:
     """OpenRouter APIからJSONデータを取得"""
     url = "https://openrouter.ai/api/v1/models"
 
-    headers = {
-        "User-Agent": config["api"]["user_agent"]
-    }
+    headers = {"User-Agent": config["api"]["user_agent"]}
 
-    params = {
-        "max_price": 0
-    }
+    params = {"max_price": 0}
 
     try:
         response = requests.get(
-            url,
-            headers=headers,
-            params=params,
-            timeout=config["api"]["timeout"]
+            url, headers=headers, params=params, timeout=config["api"]["timeout"]
         )
         response.raise_for_status()
 
@@ -47,7 +40,8 @@ def fetch_json_data(config: Dict) -> Dict:
         print(f"Failed to fetch JSON data: {e}")
         return {}
 
-def extract_free_models(json_data: Dict) -> List[Dict]:
+
+def extract_free_models(json_data: dict) -> list[dict]:
     """JSONデータからFreeモデルを抽出"""
     free_models = []
 
@@ -56,19 +50,25 @@ def extract_free_models(json_data: Dict) -> List[Dict]:
 
     for model in json_data["data"]:
         # Freeモデルのみを抽出
-        if model.get("pricing", {}).get("prompt") == 0 and model.get("pricing", {}).get("completion") == 0:
-            free_models.append({
-                "id": model["id"],
-                "name": model.get("name", "Unknown"),
-                "context_length": model.get("context_length", 0),
-                "created_at": model.get("created_at", ""),
-                "updated_at": model.get("updated_at", ""),
-                "provider": model.get("provider", "Unknown")
-            })
+        if (
+            model.get("pricing", {}).get("prompt") == 0
+            and model.get("pricing", {}).get("completion") == 0
+        ):
+            free_models.append(
+                {
+                    "id": model["id"],
+                    "name": model.get("name", "Unknown"),
+                    "context_length": model.get("context_length", 0),
+                    "created_at": model.get("created_at", ""),
+                    "updated_at": model.get("updated_at", ""),
+                    "provider": model.get("provider", "Unknown"),
+                }
+            )
 
     return free_models
 
-def compare_models(current_models: List[Dict], previous_models: List[Dict]) -> Dict:
+
+def compare_models(current_models: list[dict], previous_models: list[dict]) -> dict:
     """モデルの増減を比較"""
     current_ids = {m["id"] for m in current_models}
     previous_ids = {m["id"] for m in previous_models}
@@ -76,23 +76,23 @@ def compare_models(current_models: List[Dict], previous_models: List[Dict]) -> D
     new_models = [m for m in current_models if m["id"] not in previous_ids]
     removed_models = [m for m in previous_models if m["id"] not in current_ids]
 
-    return {
-        "new": new_models,
-        "removed": removed_models
-    }
+    return {"new": new_models, "removed": removed_models}
 
-def save_model_list(models: List[Dict], filename: str = "free_models.json"):
+
+def save_model_list(models: list[dict], filename: str = "free_models.json"):
     """モデルリストを保存"""
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(models, f, indent=2, ensure_ascii=False)
 
-def load_model_list(filename: str = "free_models.json") -> List[Dict]:
+
+def load_model_list(filename: str = "free_models.json") -> list[dict]:
     """モデルリストを読み込み"""
     try:
         with open(filename, encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
         return []
+
 
 def main():
     """メイン処理"""
@@ -136,6 +136,7 @@ def main():
     # モデルリストの保存
     save_model_list(current_models)
     print("\n✓ Free model list saved")
+
 
 if __name__ == "__main__":
     main()

@@ -1,8 +1,6 @@
 import sqlite3
+import time
 from dataclasses import dataclass
-from typing import Dict
-from typing import List
-from typing import Set
 
 
 @dataclass
@@ -15,6 +13,7 @@ class Model:
     created_at: str
     updated_at: str
 
+
 @dataclass
 class DailyStats:
     model_id: str
@@ -24,16 +23,25 @@ class DailyStats:
     prompt_price: float
     completion_price: float
 
+
 class Database:
     def __init__(self, db_path: str):
         self.db_path = db_path
         self.conn = None
 
     def __enter__(self):
-        self.conn = sqlite3.connect(self.db_path, timeout=30.0)
-        self.conn.execute("PRAGMA journal_mode=WAL")
-        self.conn.row_factory = sqlite3.Row
-        return self
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                self.conn = sqlite3.connect(self.db_path, timeout=30.0)
+                self.conn.execute("PRAGMA journal_mode=WAL")
+                self.conn.row_factory = sqlite3.Row
+                return self
+            except sqlite3.OperationalError as e:
+                if "locked" in str(e) and attempt < max_retries - 1:
+                    time.sleep(0.1 * (attempt + 1))
+                    continue
+                raise
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.conn:
@@ -107,24 +115,31 @@ class Database:
                     model.name,
                     model.provider,
                     model.context_length,
-                    model.description
-                )
+                    model.description,
+                ),
             )
 
             # 新規追加の場合、履歴に記録
             if cursor.rowcount > 0 and cursor.lastrowid > 0:
-                is_new = self.conn.execute(
-                    "SELECT COUNT(*) FROM history WHERE model_id = ? AND event = 'new'",
-                    (model.id,)
-                ).fetchone()[0] == 0
+                is_new = (
+                    self.conn.execute(
+                        "SELECT COUNT(*) FROM history "
+                        "WHERE model_id = ? AND event = 'new'",
+                        (model.id,),
+                    ).fetchone()[0]
+                    == 0
+                )
 
                 if is_new:
-                    self.conn.execute("""
+                    self.conn.execute(
+                        """
                         INSERT INTO history (model_id, event, details)
                         VALUES (?, 'new', ?)
-                    """, (model.id, f"New model added: {model.name}"))
+                    """,
+                        (model.id, f"New model added: {model.name}"),
+                    )
 
-    def save_daily_stats(self, stats: List[DailyStats]):
+    def save_daily_stats(self, stats: list[DailyStats]):
         """日次統計を保存"""
         with self.conn:
             for stat in stats:
@@ -141,58 +156,66 @@ class Database:
                         stat.rank,
                         stat.weekly_tokens,
                         stat.prompt_price,
-                        stat.completion_price
-                    )
+                        stat.completion_price,
+                    ),
                 )
 
-    def get_latest_rankings_before(self, date_threshold: str) -> Dict[str, int]:
+    def get_latest_rankings_before(self, date_threshold: str) -> dict[str, int]:
         """指定日以前の直近のランキングを取得(24時間以上前の比較用)"""
         # 指定日以前で最も新しい日付を取得
-        latest_date_row = self.conn.execute("""
+        latest_date_row = self.conn.execute(
+            """
             SELECT MAX(date) as max_date
             FROM daily_stats
             WHERE date <= ?
-        """, (date_threshold,)).fetchone()
+        """,
+            (date_threshold,),
+        ).fetchone()
 
         if not latest_date_row or not latest_date_row["max_date"]:
             return {}
 
         target_date = latest_date_row["max_date"]
 
-        previous_rankings = self.conn.execute("""
+        previous_rankings = self.conn.execute(
+            """
             SELECT model_id, rank
             FROM daily_stats
             WHERE date = ?
-        """, (target_date,)).fetchall()
+        """,
+            (target_date,),
+        ).fetchall()
 
         return {row["model_id"]: row["rank"] for row in previous_rankings}
 
-    def get_top_models_by_tokens(self, date: str, limit: int = 5) -> List[Dict]:
+    def get_top_models_by_tokens(self, date: str, limit: int = 5) -> list[dict]:
         """指定日のトークン数トップNモデルを取得"""
-        return self.conn.execute("""
+        return self.conn.execute(
+            """
             SELECT m.*, d.rank, d.weekly_tokens
             FROM daily_stats d
             JOIN models m ON d.model_id = m.id
             WHERE d.date = ?
             ORDER BY d.rank
             LIMIT ?
-        """, (date, limit)).fetchall()
+        """,
+            (date, limit),
+        ).fetchall()
 
-    def get_all_models(self) -> List[Model]:
+    def get_all_models(self) -> list[Model]:
         """全モデルを取得"""
         rows = self.conn.execute("SELECT * FROM models").fetchall()
         return [Model(**dict(row)) for row in rows]
 
-    def get_all_model_ids(self) -> Set[str]:
+    def get_all_model_ids(self) -> set[str]:
         """全モデルIDのセットを取得"""
         rows = self.conn.execute("SELECT id FROM models").fetchall()
         return {row["id"] for row in rows}
 
-    def detect_new_models(self, current_models: List[str]) -> List[str]:
+    def detect_new_models(self, current_models: list[str]) -> list[str]:
         """新規モデルを検出"""
         existing_models = self.get_all_model_ids()
         new_models = [
-            model_id for model_id in current_models
-            if model_id not in existing_models
+            model_id for model_id in current_models if model_id not in existing_models
         ]
         return new_models

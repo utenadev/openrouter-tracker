@@ -9,16 +9,12 @@ with open("config.yaml") as f:
     config = yaml.safe_load(f)
 
 # ヘッダーの設定
-headers = {
-    "User-Agent": config["api"]["user_agent"]
-}
+headers = {"User-Agent": config["api"]["user_agent"]}
 
 # データの取得
 try:
     response = requests.get(
-        config["api"]["base_url"],
-        timeout=config["api"]["timeout"],
-        headers=headers
+        config["api"]["base_url"], timeout=config["api"]["timeout"], headers=headers
     )
     response.raise_for_status()
 

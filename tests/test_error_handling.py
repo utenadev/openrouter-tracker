@@ -26,7 +26,7 @@ class TestErrorHandling(unittest.TestCase):
                 "timeout": 30,
                 "max_retries": 2,
                 "retry_delay": 5,
-                "user_agent": "Test User Agent"
+                "user_agent": "Test User Agent",
             }
         }
         self.logger = logging.getLogger(__name__)
@@ -92,6 +92,7 @@ class TestErrorHandling(unittest.TestCase):
 
         # データが取得されていることを確認
         self.assertIn("Test Model", result)
+
 
 if __name__ == "__main__":
     unittest.main()

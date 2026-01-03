@@ -18,10 +18,13 @@ OpenRouter Tracker fetches data from OpenRouter (via `r.jina.ai`), stores it in 
   * Daily summaries.
 * **Logging**: Detailed logging with rotation support.
 * **Table Format Support**: Parses OpenRouter's new table-formatted markdown data.
+* **Enhanced Error Handling**: Robust retry logic and error handling for API calls and database operations.
+* **WAL Mode Database**: Uses SQLite WAL mode for better concurrency and performance.
+* **Environment Variable Support**: Supports configuration via environment variables for better security.
 
 ## Requirements
 
-* Python 3.8+
+* Python 3.11+
 * SQLite 3
 * Discord Webhook URL
 
@@ -83,7 +86,7 @@ database:
 
 # API settings
 api:
-  base_url: "https://r.jina.ai/https://openrouter.ai/models?max_price=0&order=top-weekly"
+  base_url: "https://r.jina.ai/https://openrouter.ai/models?fmt=table&max_price=0&order=top-weekly"
   timeout: 30
   max_retries: 2
   retry_delay: 5

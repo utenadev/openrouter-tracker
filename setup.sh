@@ -4,10 +4,10 @@ set -e
 echo "Setting up openrouter-tracker..."
 
 # ディレクトリ作成
-mkdir -p ~/openrouter-tracker/logs
+mkdir -p logs
 
 # 仮想環境の作成（推奨）
-cd ~/openrouter-tracker
+cd "$(dirname "$0")"
 python3 -m venv venv
 
 # .gitignoreの作成

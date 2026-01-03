@@ -31,6 +31,7 @@ MOCK_MARKDOWN = """
 | [GPT-3.5 Turbo](https://openrouter.ai/openai/gpt-3.5-turbo) | 600M | 16K | $0.0001/M | $0.0002/M | OpenAI |
 """
 
+
 def test_main_with_mock():
     """モックデータを使用してメイン処理をテスト"""
     print("Testing main script with mock data...")
@@ -68,7 +69,7 @@ def test_main_with_mock():
                 context_length=model_data["context_length"],
                 description="",
                 created_at=datetime.now().isoformat(),
-                updated_at=datetime.now().isoformat()
+                updated_at=datetime.now().isoformat(),
             )
             db.upsert_model(model)
 
@@ -84,7 +85,7 @@ def test_main_with_mock():
                 rank=rank,
                 weekly_tokens=model_data["weekly_tokens"],
                 prompt_price=model_data["prompt_price"],
-                completion_price=model_data["completion_price"]
+                completion_price=model_data["completion_price"],
             )
             daily_stats.append(stat)
 
@@ -121,11 +122,12 @@ def test_main_with_mock():
     notifier.send_summary(
         total_models=len(models_data),
         total_tokens=total_tokens,
-        new_models_count=len(new_models)
+        new_models_count=len(new_models),
     )
     print("✓ Summary notification sent")
 
     print("\n✓ Main script test completed successfully!")
+
 
 if __name__ == "__main__":
     test_main_with_mock()
