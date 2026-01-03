@@ -37,13 +37,15 @@ git clone https://github.com/utenadev/openrouter-tracker.git
 cd openrouter-tracker
 ```
 
-### 2. Install Dependencies
+### 2. Install Task (Optional but Recommended)
+
+For easier project management, install Task runner:
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate  # Linux/Mac
-# .\venv\Scripts\activate  # Windows
-pip install -r requirements.txt
+# Using mise (if you have mise installed)
+mise install task=latest
+
+# Or install directly from https://taskfile.dev/installation/
 ```
 
 ### 3. Set Up Environment Variables (Optional but Recommended)
@@ -70,7 +72,36 @@ dotenvx up  # Load environment variables
 dotenvx exec "python3 fetch_openrouter.py"  # Run with loaded variables
 ```
 
-### 4. Edit Configuration File
+### 4. Setup Using Task (Recommended)
+
+If you have Task installed, simply run:
+```bash
+task setup
+```
+
+This will:
+- Create virtual environment
+- Install dependencies
+- Create necessary directories and files
+- Initialize the database
+
+### 5. Manual Setup (Alternative)
+
+If you prefer not to use Task, you can set up manually:
+
+1. Create virtual environment:
+```bash
+python3 -m venv venv
+source venv/bin/activate  # Linux/Mac
+# .\venv\Scripts\activate  # Windows
+```
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Edit Configuration File
 
 Edit `config.yaml` to set your Discord Webhook URL (if not using environment variables).
 
@@ -100,14 +131,45 @@ logging:
   backup_count: 5
 ```
 
-### 4. Run Setup Script
-
+4. Initialize the database:
 ```bash
-chmod +x setup.sh
-./setup.sh
+python3 -c "from db import Database; db = Database('models.db'); db.__enter__(); db.init_db()"
 ```
 
 ## Usage
+
+### Using Task (Recommended)
+
+If you have Task installed, you can use these convenient commands:
+
+```bash
+# Run the main script
+task run
+
+# Run tests
+task test
+
+# Run specific tests
+task test-unit
+task test-format
+task test-discord
+
+# Lint and format code
+task lint
+task lint-fix
+
+# Clean up temporary files
+task clean
+task clean-logs
+task clean-db
+task reset
+
+# Check project status
+task status
+
+# Show available tasks
+task help
+```
 
 ### Manual Execution
 
@@ -119,6 +181,13 @@ chmod +x setup.sh
 
 Set up Cron to run twice daily (e.g., 6:00 AM and 6:00 PM).
 
+Using Task (recommended):
+```bash
+0 6 * * * cd /path/to/openrouter-tracker && task run
+0 18 * * * cd /path/to/openrouter-tracker && task run
+```
+
+Or using direct Python execution:
 ```bash
 0 6 * * * cd /path/to/openrouter-tracker && /path/to/venv/bin/python3 fetch_openrouter.py
 0 18 * * * cd /path/to/openrouter-tracker && /path/to/venv/bin/python3 fetch_openrouter.py

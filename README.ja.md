@@ -33,18 +33,73 @@ git clone https://github.com/utenadev/openrouter-tracker.git
 cd openrouter-tracker
 ```
 
-### 2. 依存関係のインストール
+### 2. Taskのインストール（任意だが推奨）
 
+より簡単なプロジェクト管理のために、Task runnerをインストールしてください：
+
+```bash
+# miseを使用する場合（miseがインストールされている場合）
+mise install task=latest
+
+# または https://taskfile.dev/installation/ から直接インストール
+```
+
+### 3. 環境変数の設定（任意だが推奨）
+
+より良いセキュリティと柔軟性のために、dotenvxで環境変数を使用してください：
+
+1. 例ファイルをコピー：
+```bash
+cp .env.example .env
+```
+
+2. `.env`を編集して必要な変数をアンコメント/変更：
+```bash
+# Discord webhook用
+DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/your/webhook/url"
+
+# テスト中に通知を無効化する場合
+DISCORD_NOTIFIER_DISABLED="false"
+```
+
+3. dotenvxを使用してアプリケーションを実行：
+```bash
+dotenvx up  # 環境変数をロード
+dotenvx exec "python3 fetch_openrouter.py"  # ロードされた変数で実行
+```
+
+### 4. Taskを使用したセットアップ（推奨）
+
+Taskがインストールされている場合、単に実行：
+```bash
+task setup
+```
+
+これにより以下の処理が行われます：
+- 仮想環境の作成
+- 依存関係のインストール
+- 必要なディレクトリとファイルの作成
+- データベースの初期化
+
+### 5. 手動セットアップ（代替）
+
+Taskを使用したくない場合は、手動でセットアップできます：
+
+1. 仮想環境を作成：
 ```bash
 python3 -m venv venv
 source venv/bin/activate  # Linux/Mac
 # .\venv\Scripts\activate  # Windows
+```
+
+2. 依存関係をインストール：
+```bash
 pip install -r requirements.txt
 ```
 
-### 3. 設定ファイルの編集
+3. 設定ファイルの編集
 
-`config.yaml`を編集して、Discord Webhook URLを設定します。
+`config.yaml`を編集して、Discord Webhook URLを設定します（環境変数を使用しない場合）。
 
 ```yaml
 # Discord設定
@@ -58,7 +113,7 @@ database:
 
 # API設定
 api:
-  base_url: "https://r.jina.ai/https://openrouter.ai/models?max_price=0&order=top-weekly"
+  base_url: "https://r.jina.ai/https://openrouter.ai/models?fmt=table&max_price=0&order=top-weekly"
   timeout: 30
   max_retries: 2
   retry_delay: 5
@@ -72,14 +127,45 @@ logging:
   backup_count: 5
 ```
 
-### 4. セットアップスクリプトの実行
-
+4. データベースを初期化：
 ```bash
-chmod +x setup.sh
-./setup.sh
+python3 -c "from db import Database; db = Database('models.db'); db.__enter__(); db.init_db()"
 ```
 
 ## 使用方法
+
+### Taskを使用（推奨）
+
+Taskがインストールされている場合、これらの便利なコマンドを使用できます：
+
+```bash
+# メインスクリプトを実行
+task run
+
+# テストを実行
+task test
+
+# 特定のテストを実行
+task test-unit
+task test-format
+task test-discord
+
+# コードのリンティングとフォーマット
+task lint
+task lint-fix
+
+# 一時ファイルをクリーンアップ
+task clean
+task clean-logs
+task clean-db
+task reset
+
+# プロジェクトの状態を確認
+task status
+
+# 利用可能なタスクを表示
+task help
+```
 
 ### 手動実行
 
@@ -91,6 +177,13 @@ chmod +x setup.sh
 
 Cronを使用して1日2回（例: 午前6時と午後6時）実行するように設定します。
 
+Taskを使用（推奨）：
+```bash
+0 6 * * * cd /path/to/openrouter-tracker && task run
+0 18 * * * cd /path/to/openrouter-tracker && task run
+```
+
+または直接Python実行：
 ```bash
 0 6 * * * cd /path/to/openrouter-tracker && /path/to/venv/bin/python3 fetch_openrouter.py
 0 18 * * * cd /path/to/openrouter-tracker && /path/to/venv/bin/python3 fetch_openrouter.py
