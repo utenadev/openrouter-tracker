@@ -10,10 +10,10 @@ OpenRouter Tracker fetches data from OpenRouter (via `r.jina.ai`), stores it in 
 
 ## Features
 
-* **Data Fetching**: Scrapes model data from OpenRouter's table format including weekly token usage, context length, and pricing.
+* **Data Fetching**: Scrapes model data from OpenRouter's table format including rank scores, context length, and pricing.
 * **Database**: Stores model information and daily statistics in SQLite (`models.db`).
 * **Notifications**: Sends Discord notifications for:
-  * Top 5 models by weekly token usage.
+  * Top 5 models by rank score.
   * New model additions.
   * Daily summaries.
 * **Logging**: Detailed logging with rotation support.
@@ -48,16 +48,23 @@ mise install task=latest
 # Or install directly from https://taskfile.dev/installation/
 ```
 
-### 3. Set Up Environment Variables (Optional but Recommended)
+### 3. Set Up Environment Variables (Required - Use dotenvx)
 
-For better security and flexibility, use environment variables with dotenvx:
+For security and proper configuration, **dotenvx is required** for running the application:
 
-1. Copy the example file:
+1. Install dotenvx from [dotenvx.com](https://dotenvx.com/):
+```bash
+# Follow installation instructions at https://dotenvx.com/
+# For example, on Linux/macOS:
+curl -fsSL https://dotenvx.sh/ | sh
+```
+
+2. Copy the example file:
 ```bash
 cp .env.example .env
 ```
 
-2. Edit `.env` and uncomment/modify the variables you need:
+3. Edit `.env` and uncomment/modify the variables you need:
 ```bash
 # For Discord webhook
 DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/your/webhook/url"
@@ -66,10 +73,13 @@ DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/your/webhook/url"
 DISCORD_NOTIFIER_DISABLED="false"
 ```
 
-3. Use dotenvx to run the application:
+4. Use dotenvx to run the application:
 ```bash
 dotenvx up  # Load environment variables
 dotenvx exec "python3 fetch_openrouter.py"  # Run with loaded variables
+```
+
+**Important**: The application is designed to work with dotenvx. Running `python3 fetch_openrouter.py` directly without dotenvx may result in missing configuration.
 ```
 
 ### 4. Setup Using Task (Recommended)

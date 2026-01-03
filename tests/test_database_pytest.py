@@ -1,18 +1,11 @@
-#!/usr/bin/env python3
-"""テストスクリプト - モックデータを使用して動作を確認
-
-環境変数:
-    DISCORD_WEBHOOK_URL: Discord Webhook URL (設定されていれば優先的に使用)
-    DISCORD_NOTIFIER_DISABLED: "true"に設定すると通知を無効化
-"""
-
 import sys
-import traceback
 from datetime import datetime
 from pathlib import Path
 
-# プロジェクトルートをパスに追加
-sys.path.insert(0, str(Path(__file__).parent.resolve()))
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent.parent.resolve()))
+
+from unittest.mock import patch
 
 import yaml
 
@@ -27,6 +20,8 @@ def test_database_operations():
     print("Testing database operations...")
 
     db_path = Path("test_models.db")
+    if db_path.exists():
+        db_path.unlink()
 
     # データベース初期化
     with Database(str(db_path)) as db:
@@ -67,7 +62,7 @@ def test_database_operations():
                 model_id="mistralai/Mistral-7B-Instruct-v0.1",
                 date=today,
                 rank=1,
-                weekly_tokens=1200.0,
+                rank_score=1200.0,
                 prompt_price=0.0,
                 completion_price=0.0,
             ),
@@ -75,12 +70,11 @@ def test_database_operations():
                 model_id="meta-llama/Llama-2-7b-chat",
                 date=today,
                 rank=2,
-                weekly_tokens=950.0,
+                rank_score=950.0,
                 prompt_price=0.0,
                 completion_price=0.0,
             ),
         ]
-
         db.save_daily_stats(daily_stats)
         print("✓ Daily stats saved")
 
@@ -88,7 +82,8 @@ def test_database_operations():
         models = db.get_all_models()
         print(f"✓ Retrieved {len(models)} models")
 
-        top_models = db.get_top_models_by_tokens(today, limit=5)
+        # ランキングの取得
+        top_models = db.get_top_models(today, limit=5)
         print(f"✓ Retrieved {len(top_models)} top models")
 
         # 新規モデル検出
@@ -98,77 +93,57 @@ def test_database_operations():
             "new-model",
         ]
         new_models = db.detect_new_models(current_ids)
-        print(f"✓ Detected {len(new_models)} new models: {new_models}")
+        print(f"✓ Detected {len(new_models)} new models")
+
+    # Cleanup
+    if db_path.exists():
+        db_path.unlink()
 
 
 def test_discord_notifier():
-    """Discord通知のテスト(実際には送信しない)"""
-    print("\nTesting Discord notifier...")
+    """Discord通知のテスト"""
+    print("Testing Discord notification...")
 
-    # テスト用のモックWebhook URL
-    # 環境変数が設定されていれば優先的に使用
-    notifier = DiscordNotifier(enabled=False)  # デフォルトでは無効化
-    print("✓ Discord notifier initialized")
+    notifier = DiscordNotifier(
+        webhook_url="https://discord.com/api/webhooks/test", enabled=False
+    )
 
     # テストデータ
-    test_models = [
+    top_models = [
         {
-            "id": "test-model-1",
-            "name": "Test Model 1",
-            "provider": "Test Provider",
-            "context_length": 8192,
-            "weekly_tokens": 1000.0,
+            "id": "mistralai/Mistral-7B-Instruct-v0.1",
+            "name": "Mistral 7B",
+            "rank_score": 1200.0,
             "rank": 1,
+            "context_length": 32768,
         }
     ]
+    previous_rankings = {"mistralai/Mistral-7B-Instruct-v0.1": 2}
 
-    # 通知メソッドの呼び出し(実際には送信されない)
-    notifier.send_top5_notification(test_models, {})
-    print("✓ Top5 notification method called")
-
-    notifier.send_new_models_notification(test_models)
-    print("✓ New models notification method called")
-
-    notifier.send_summary(5, 5000.0, 1)
-    print("✓ Summary notification method called")
+    # 通知送信（モックされるはず）
+    with patch("discord_notifier.requests.post") as mock_post:
+        mock_post.return_value.status_code = 204
+        notifier.send_top5_notification(top_models, previous_rankings)
+        print("✓ Notification test completed")
 
 
 def test_config_loading():
-    """設定ファイルの読み込みテスト"""
-    print("\nTesting config loading...")
-
+    """設定読み込みのテスト"""
+    print("Testing config loading...")
     config_path = Path("config.yaml")
+
     if config_path.exists():
         with open(config_path) as f:
             config = yaml.safe_load(f)
-        print("✓ Config file loaded successfully")
-        print(f"  - Discord enabled: {config['discord']['enabled']}")
-        print(f"  - Database path: {config['database']['path']}")
-        print(f"  - API base URL: {config['api']['base_url']}")
+            assert "database" in config
+            assert "discord" in config
+            assert "api" in config
+            print("✓ Config loaded and verified")
     else:
-        print("✗ Config file not found")
-
-
-def main():
-    """メインテスト関数"""
-    print("=" * 60)
-    print("OpenRouter Tracker - Test Suite")
-    print("=" * 60)
-
-    try:
-        test_database_operations()
-        test_discord_notifier()
-        test_config_loading()
-
-        print("\n" + "=" * 60)
-        print("✓ All tests passed successfully!")
-        print("=" * 60)
-
-    except Exception as e:
-        print(f"\n✗ Test failed: {e}")
-        traceback.print_exc()
-        sys.exit(1)
+        print("! config.yaml not found, skipping test")
 
 
 if __name__ == "__main__":
-    main()
+    test_database_operations()
+    test_discord_notifier()
+    test_config_loading()

@@ -22,7 +22,7 @@ BASE_DIR = Path(__file__).parent.resolve()
 # Table row pattern (non-greedy matching for long lines)
 TABLE_ROW_PATTERN = r"\|\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|"
 # Model URL pattern: [Model Name](https://openrouter.ai/provider/model-id)
-MODEL_URL_PATTERN = r"\[(.*?)\]\(https://openrouter\.ai/[^/]+/(.*?)\)"
+MODEL_URL_PATTERN = r"\[(.*?)\]\(https://openrouter\.ai/([^/]+)/(.*?)\)"
 
 
 def setup_logging(config: dict):
@@ -73,17 +73,37 @@ def load_config(config_path: str = "config.yaml") -> dict:
     # Load config file with absolute path
     abs_config_path = BASE_DIR / config_path
 
-    with open(abs_config_path) as f:
-        config = yaml.safe_load(f)
+    try:
+        with open(abs_config_path) as f:
+            config = yaml.safe_load(f)
+    except FileNotFoundError:
+        error_msg = f"Configuration file not found: {abs_config_path}"
+        print(
+            f"ERROR: {error_msg}"
+        )  # Use print since logger may not be initialized yet
+        raise FileNotFoundError(error_msg) from None
+    except yaml.YAMLError as e:
+        error_msg = f"Invalid YAML in configuration file {abs_config_path}: {e}"
+        print(f"ERROR: {error_msg}")
+        raise ValueError(error_msg) from e
+    except Exception as e:
+        error_msg = f"Error reading configuration file {abs_config_path}: {e}"
+        print(f"ERROR: {error_msg}")
+        raise RuntimeError(error_msg) from e
 
     # Convert relative paths to absolute paths (only if paths in config are relative)
-    db_path = Path(config["database"]["path"])
-    if not db_path.is_absolute():
-        config["database"]["path"] = str(BASE_DIR / db_path)
+    try:
+        db_path = Path(config["database"]["path"])
+        if not db_path.is_absolute():
+            config["database"]["path"] = str(BASE_DIR / db_path)
 
-    log_path = Path(config["logging"]["file"])
-    if not log_path.is_absolute():
-        config["logging"]["file"] = str(BASE_DIR / log_path)
+        log_path = Path(config["logging"]["file"])
+        if not log_path.is_absolute():
+            config["logging"]["file"] = str(BASE_DIR / log_path)
+    except KeyError as e:
+        error_msg = f"Missing required configuration key: {e}"
+        print(f"ERROR: {error_msg}")
+        raise ValueError(error_msg) from e
 
     return config
 
@@ -130,18 +150,29 @@ def extract_price(price_str: str) -> float:
 
 def fetch_markdown(config: dict, logger: logging.Logger) -> str:
     """Fetch Markdown data from r.jina.ai"""
-    max_retries = config["api"]["max_retries"]
-    retry_delay = config["api"]["retry_delay"]
+    # Handle both full config and api sub-config for flexibility in tests
+    api_config = config.get("api", config)
+
+    max_retries = api_config.get("max_retries", 2)
+    retry_delay = api_config.get("retry_delay", 5)
+    base_url = api_config.get("base_url")
+    timeout = api_config.get("timeout", 30)
+    user_agent = api_config.get("user_agent", "Mozilla/5.0")
+
+    if not base_url:
+        error_message = "API base_url not found in configuration"
+        raise ValueError(error_message)
+
     last_error = None
 
     # Set headers
-    headers = {"User-Agent": config["api"]["user_agent"]}
+    headers = {"User-Agent": user_agent}
 
     for attempt in range(max_retries + 1):
         try:
             response = requests.get(
-                config["api"]["base_url"],
-                timeout=config["api"]["timeout"],
+                base_url,
+                timeout=timeout,
                 headers=headers,
             )
             response.raise_for_status()
@@ -181,13 +212,43 @@ def parse_markdown(markdown: str, logger: logging.Logger) -> list[dict]:
     # Skip table header
     in_table = False
     header_line_count = 0
+    header_columns = []
+    column_indices = {}
 
     for line in lines:
+        stripped_line = line.strip()
+        if not stripped_line:
+            continue
+
         # Detect table start (header line) - line containing Model Name & ID
         # or Model Name
-        if line.startswith("|") and ("Model Name" in line or "Model" in line):
+        if (
+            not in_table
+            and stripped_line.startswith("|")
+            and (
+                "Name" in stripped_line
+                or "Model" in stripped_line
+                or "ID" in stripped_line
+            )
+        ):
             in_table = True
             header_line_count = 0
+            # Parse header columns to identify column order
+            header_parts = [col.strip() for col in stripped_line.split("|")]
+            header_columns = [col for col in header_parts if col]
+            # Map column names to their indices
+            for idx, col_name in enumerate(header_columns):
+                col_name_lower = col_name.lower()
+                if "model" in col_name_lower or "name" in col_name_lower:
+                    column_indices["model"] = idx
+                elif "input" in col_name_lower or (
+                    "price" in col_name_lower and "output" not in col_name_lower
+                ):
+                    column_indices["input_price"] = idx
+                elif "output" in col_name_lower or "completion" in col_name_lower:
+                    column_indices["output_price"] = idx
+                elif "context" in col_name_lower or "length" in col_name_lower:
+                    column_indices["context"] = idx
             continue
 
         # Skip table header separator line
@@ -198,50 +259,72 @@ def parse_markdown(markdown: str, logger: logging.Logger) -> list[dict]:
 
         # Process table data rows
         if in_table and line.startswith("|"):
-            # Match with table row pattern
-            table_match = re.search(TABLE_ROW_PATTERN, line)
-            if not table_match:
-                # Debug: Show line that didn't match
-                logger.debug("No match for line: %s", line[:100])
-                continue
+            # Split by | and remove empty strings from ends
+            columns = [col.strip() for col in line.split("|")]
+            # Filter out empty strings at the beginning and end if they exist due
+            # to leading/trailing |
+            if columns[0] == "":
+                columns = columns[1:]
+            if columns and columns[-1] == "":
+                columns = columns[:-1]
 
-            # Extract each column of the table
-            columns = [col.strip() for col in table_match.groups()]
             if len(columns) < 4:
                 continue
 
-            # Actual data format
-            model_name_col, input_price_col, output_price_col, context_col = columns[:4]
+            # Dynamically extract columns based on header mapping
+            # Default indices if not found in header
+            idx_model = column_indices.get("model", 0)
+            idx_input = column_indices.get("input_price", 1)
+            idx_output = column_indices.get("output_price", 2)
+            idx_context = column_indices.get("context", 3)
+
+            # Ensure indices are within bounds
+            if max(idx_model, idx_input, idx_output, idx_context) >= len(columns):
+                continue
+
+            model_name_col = columns[idx_model]
+            input_price_col = columns[idx_input]
+            output_price_col = columns[idx_output]
+            context_col = columns[idx_context]
 
             # Extract model name and ID (model name contains URL)
             model_url_match = re.search(MODEL_URL_PATTERN, model_name_col)
             if not model_url_match:
                 # If URL is direct
                 url_match = re.search(
-                    r"https://openrouter\.ai/[^/]+/(.*?)", model_name_col
+                    r"https://openrouter\.ai/([^/]+)/(.*?)[\)\s]", model_name_col
                 )
                 if url_match:
-                    model_id = url_match.group(1)
+                    provider_slug = url_match.group(1)
+                    model_id_slug = url_match.group(2)
+                    model_id = f"{provider_slug}/{model_id_slug}"
                     # Remove URL from model name
                     clean_name = re.sub(
                         r"https://openrouter\.ai/[^/]+/.*?\s*", "", model_name_col
                     ).strip()
+                    # If still has brackets/parens, clean them
+                    clean_name = re.sub(r"[\[\]\(\)]", "", clean_name).strip()
                 else:
                     # Skip if no URL
                     continue
             else:
-                clean_name, model_id = model_url_match.groups()
+                clean_name, provider_slug, model_id_slug = model_url_match.groups()
+                model_id = f"{provider_slug}/{model_id_slug}"
 
-            # Extract ID surrounded by backticks
+            # Extract ID surrounded by backticks (usually more accurate)
             backtick_match = re.search(r"`([^`]+)`", model_name_col)
             if backtick_match:
                 model_id = backtick_match.group(1)
 
-            # Extract provider from model name
+            # Extract provider from model name or ID
             if ":" in clean_name:
                 provider = clean_name.split(":")[0].strip()
                 # Remove provider name from model name
                 clean_name = clean_name.split(":")[1].strip()
+            elif "/" in model_id:
+                provider_slug = model_id.split("/")[0]
+                # Capitalize provider slug as a fallback
+                provider = provider_slug.replace("-", " ").title()
             else:
                 provider = "Unknown"
 
@@ -255,12 +338,10 @@ def parse_markdown(markdown: str, logger: logging.Logger) -> list[dict]:
 
             # Weekly token count cannot be obtained directly from API, so set
             # rank based on line number
-            # API sorts models by order=top-weekly, so line number becomes the rank
-            # Here we set a temporary value and overwrite with actual rank later
             rank_counter += 1
             # API returns models in top-weekly order, so rank_counter becomes the rank
-            # Use inverse of rank as weekly token count (lower rank = more tokens)
-            weekly_tokens = (
+            # Use inverse of rank as rank score (lower rank = higher score)
+            rank_score = (
                 10000.0 / rank_counter
             )  # Temporary value, higher rank has smaller value
 
@@ -271,7 +352,7 @@ def parse_markdown(markdown: str, logger: logging.Logger) -> list[dict]:
                     "provider": provider,
                     "context_length": context_length,
                     "description": "",
-                    "weekly_tokens": weekly_tokens,
+                    "rank_score": rank_score,
                     "prompt_price": input_price,
                     "completion_price": output_price,
                 }
@@ -305,8 +386,8 @@ def main():
         logger.info("Parsing markdown data...")
         models_data = parse_markdown(markdown, logger)
 
-        # Sort by weekly token count to create rankings (commented out)
-        models_data.sort(key=lambda x: x["weekly_tokens"], reverse=True)
+        # Sort by rank score to create rankings (based on API's top-weekly order)
+        models_data.sort(key=lambda x: x["rank_score"], reverse=True)
 
         # Database operations
         db_path = Path(config["database"]["path"])
@@ -350,7 +431,7 @@ def main():
                     model_id=model_data["id"],
                     date=today,
                     rank=rank,
-                    weekly_tokens=model_data["weekly_tokens"],
+                    rank_score=model_data["rank_score"],
                     prompt_price=model_data["prompt_price"],
                     completion_price=model_data["completion_price"],
                 )
@@ -371,7 +452,7 @@ def main():
 
         with Database(str(db_path)) as db:
             previous_rankings = db.get_latest_rankings_before(threshold_date)
-            top_models = db.get_top_models_by_tokens(today, limit=5)
+            top_models = db.get_top_models(today, limit=5)
 
         # Top 5 notification
         logger.info("Sending Discord notification...")
@@ -383,11 +464,11 @@ def main():
             notifier.send_new_models_notification(new_models)
 
         # Summary notification
-        total_tokens = sum(m["weekly_tokens"] for m in models_data)
+        total_score = sum(m["rank_score"] for m in models_data)
 
         notifier.send_summary(
             total_models=len(models_data),
-            total_tokens=total_tokens,
+            total_tokens=total_score,
             new_models_count=len(new_models),
         )
 

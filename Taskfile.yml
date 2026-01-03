@@ -28,10 +28,16 @@ tasks:
       - 'echo "3. Add to crontab: crontab -e"'
 
   run:
-    desc: Run the main script to fetch OpenRouter data
+    desc: Run the main script to fetch OpenRouter data (requires dotenvx)
     deps: [setup]
     cmds:
-      - '{{.PYTHON_PATH}} fetch_openrouter.py'
+      - |
+        if ! command -v dotenvx &> /dev/null; then
+          echo "Error: dotenvx is required but not found."
+          echo "Please install dotenvx from https://dotenvx.com/"
+          exit 1
+        fi
+        dotenvx exec -- {{.PYTHON_PATH}} fetch_openrouter.py
 
   test:
     desc: Run all tests

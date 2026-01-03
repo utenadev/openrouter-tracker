@@ -7,12 +7,12 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.resolve()))
 
-import logging  # noqa: E402
+import logging
 
-import yaml  # noqa: E402
+import yaml
 
-from fetch_openrouter import fetch_markdown  # noqa: E402
-from fetch_openrouter import parse_markdown  # noqa: E402
+from fetch_openrouter import fetch_markdown
+from fetch_openrouter import parse_markdown
 
 # ログ設定
 logging.basicConfig(
@@ -49,20 +49,20 @@ def test_table_format_fetch():
         print(f"\n✓ Successfully parsed {len(models)} models")
         print("\n=== Top 5 Models ===")
         for i, model in enumerate(
-            sorted(models, key=lambda x: x["weekly_tokens"], reverse=True)[:5], 1
+            sorted(models, key=lambda x: x["rank_score"], reverse=True)[:5], 1
         ):
             print(f"{i}. {model['name']}")
             print(f"   ID: {model['id']}")
             print(f"   Provider: {model['provider']}")
-            print(f"   Weekly Tokens: {model['weekly_tokens']}M")
+            print(f"   Rank Score: {model['rank_score']}")
             print(f"   Context: {model['context_length']}")
             print(f"   Input Price: ${model['prompt_price']}/M")
             print(f"   Output Price: ${model['completion_price']}/M")
             print()
 
-        # 総トークン数の計算
-        total_tokens = sum(m["weekly_tokens"] for m in models)
-        print(f"\nTotal Weekly Tokens: {total_tokens / 1000:.2f}B")
+        # 総ランクスコアの計算
+        total_score = sum(m["rank_score"] for m in models)
+        print(f"\nTotal Rank Score: {total_score / 1000:.2f}B")
 
         return True
 

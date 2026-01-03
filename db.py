@@ -19,7 +19,7 @@ class DailyStats:
     model_id: str
     date: str
     rank: int
-    weekly_tokens: float
+    rank_score: float
     prompt_price: float
     completion_price: float
 
@@ -68,7 +68,7 @@ class Database:
                     model_id TEXT NOT NULL,
                     date DATE NOT NULL,
                     rank INTEGER NOT NULL,
-                    weekly_tokens REAL NOT NULL,
+                    rank_score REAL NOT NULL,
                     prompt_price REAL,
                     completion_price REAL,
                     FOREIGN KEY (model_id) REFERENCES models(id),
@@ -146,7 +146,7 @@ class Database:
                 self.conn.execute(
                     """
                     INSERT OR REPLACE INTO daily_stats
-                    (model_id, date, rank, weekly_tokens,
+                    (model_id, date, rank, rank_score,
                      prompt_price, completion_price)
                     VALUES (?, ?, ?, ?, ?, ?)
                     """,
@@ -154,7 +154,7 @@ class Database:
                         stat.model_id,
                         stat.date,
                         stat.rank,
-                        stat.weekly_tokens,
+                        stat.rank_score,
                         stat.prompt_price,
                         stat.completion_price,
                     ),
@@ -188,11 +188,11 @@ class Database:
 
         return {row["model_id"]: row["rank"] for row in previous_rankings}
 
-    def get_top_models_by_tokens(self, date: str, limit: int = 5) -> list[dict]:
-        """指定日のトークン数トップNモデルを取得"""
+    def get_top_models(self, date: str, limit: int = 5) -> list[dict]:
+        """指定日のランキングスコアトップNモデルを取得"""
         return self.conn.execute(
             """
-            SELECT m.*, d.rank, d.weekly_tokens
+            SELECT m.*, d.rank, d.rank_score
             FROM daily_stats d
             JOIN models m ON d.model_id = m.id
             WHERE d.date = ?

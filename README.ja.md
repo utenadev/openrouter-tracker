@@ -44,16 +44,23 @@ mise install task=latest
 # または https://taskfile.dev/installation/ から直接インストール
 ```
 
-### 3. 環境変数の設定（任意だが推奨）
+### 3. 環境変数の設定（必須 - dotenvxの使用）
 
-より良いセキュリティと柔軟性のために、dotenvxで環境変数を使用してください：
+セキュリティと適切な設定のために、**dotenvxの使用が必須**です：
 
-1. 例ファイルをコピー：
+1. [dotenvx.com](https://dotenvx.com/) からdotenvxをインストール：
+```bash
+# https://dotenvx.com/ のインストール手順に従ってください
+# 例：Linux/macOSの場合：
+curl -fsSL https://dotenvx.sh/ | sh
+```
+
+2. 例ファイルをコピー：
 ```bash
 cp .env.example .env
 ```
 
-2. `.env`を編集して必要な変数をアンコメント/変更：
+3. `.env`を編集して必要な変数をアンコメント/変更：
 ```bash
 # Discord webhook用
 DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/your/webhook/url"
@@ -62,10 +69,13 @@ DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/your/webhook/url"
 DISCORD_NOTIFIER_DISABLED="false"
 ```
 
-3. dotenvxを使用してアプリケーションを実行：
+4. dotenvxを使用してアプリケーションを実行：
 ```bash
 dotenvx up  # 環境変数をロード
 dotenvx exec "python3 fetch_openrouter.py"  # ロードされた変数で実行
+```
+
+**重要**: アプリケーションはdotenvxで動作するように設計されています。dotenvxを使わずに `python3 fetch_openrouter.py` を直接実行すると、設定が不足する可能性があります。
 ```
 
 ### 4. Taskを使用したセットアップ（推奨）

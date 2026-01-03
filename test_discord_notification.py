@@ -7,13 +7,13 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.resolve()))
 
-import logging  # noqa: E402
+import logging
 
-import yaml  # noqa: E402
+import yaml
 
-from discord_notifier import DiscordNotifier  # noqa: E402
-from fetch_openrouter import fetch_markdown  # noqa: E402
-from fetch_openrouter import parse_markdown  # noqa: E402
+from discord_notifier import DiscordNotifier
+from fetch_openrouter import fetch_markdown
+from fetch_openrouter import parse_markdown
 
 # ログ設定
 logging.basicConfig(

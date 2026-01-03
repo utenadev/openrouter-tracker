@@ -14,7 +14,7 @@ class ModelRanking(TypedDict):
     name: str
     provider: str
     context_length: int
-    weekly_tokens: float
+    rank_score: float
     rank: int
 
 
@@ -23,6 +23,7 @@ class NewModel(TypedDict):
     name: str
     provider: str
     context_length: int
+    rank_score: float
 
 
 class DiscordNotifier:
@@ -72,12 +73,12 @@ class DiscordNotifier:
                 change_emoji = "➡️"
                 change_text = f"#{i}"
 
-            # Format token count
-            weekly_tokens = model["weekly_tokens"]
-            if weekly_tokens >= 1000:
-                tokens_str = f"{weekly_tokens / 1000:.2f}B"
+            # Format rank score
+            rank_score = model["rank_score"]
+            if rank_score >= 1000:
+                score_str = f"{rank_score / 1000:.2f}B"
             else:
-                tokens_str = f"{weekly_tokens:.1f}M"
+                score_str = f"{rank_score:.1f}M"
 
             # Format context length
             context = model["context_length"]
@@ -88,7 +89,7 @@ class DiscordNotifier:
 
             field = {
                 "name": f"{i}. {model['name']}",
-                "value": f"🔸 Weekly Tokens: {tokens_str}\n"
+                "value": f"🔸 Rank Score: {score_str}\n"
                 f"📈 Previous Rank: {change_text} {change_emoji}\n"
                 f"📏 Context: {context_str}",
                 "inline": False,
@@ -127,16 +128,16 @@ class DiscordNotifier:
             return
 
         if total_tokens >= 1000:
-            tokens_str = f"{total_tokens / 1000:.2f}B"
+            score_str = f"{total_tokens / 1000:.2f}B"
         else:
-            tokens_str = f"{total_tokens:.1f}M"
+            score_str = f"{total_tokens:.1f}M"
 
         embed = {
             "title": "📊 Statistical Summary",
             "color": 0x1E88E5,
             "fields": [
                 {"name": "Total Models", "value": str(total_models), "inline": True},
-                {"name": "Total Weekly Tokens", "value": tokens_str, "inline": True},
+                {"name": "Total Rank Score", "value": score_str, "inline": True},
                 {
                     "name": "Added Models",
                     "value": str(new_models_count),

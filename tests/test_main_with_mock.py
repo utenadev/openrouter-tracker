@@ -20,15 +20,15 @@ from db import Model
 from discord_notifier import DiscordNotifier
 from fetch_openrouter import parse_markdown
 
-# モックデータ(テーブル形式)
+# モックデータ(テーブル形式) - weekly_tokensからrank_scoreに変更
 MOCK_MARKDOWN = """
-| Model Name | Weekly Tokens | Context | Input Price | Output Price | Provider |
-|------------|---------------|---------|-------------|--------------|----------|
-| [Mistral 7B](https://openrouter.ai/mistralai/Mistral-7B-Instruct-v0.1) | 1.2B | 32K | $0.0001/M | $0.0002/M | Mistral AI |
-| [Llama 2 7B](https://openrouter.ai/meta-llama/Llama-2-7b-chat) | 950M | 16K | $0.0001/M | $0.0002/M | Meta |
-| [Gemini Pro](https://openrouter.ai/google/gemini-pro) | 800M | 32K | $0.0001/M | $0.0002/M | Google |
-| [Claude 3 Haiku](https://openrouter.ai/anthropic/claude-3-haiku) | 700M | 200K | $0.0001/M | $0.0002/M | Anthropic |
-| [GPT-3.5 Turbo](https://openrouter.ai/openai/gpt-3.5-turbo) | 600M | 16K | $0.0001/M | $0.0002/M | OpenAI |
+| Model Name | Context | Input Price | Output Price | Provider |
+|------------|---------|-------------|--------------|----------|
+| [Mistral 7B](https://openrouter.ai/mistralai/Mistral-7B-Instruct-v0.1) | 32K | $0.0001/M | $0.0002/M | Mistral AI |
+| [Llama 2 7B](https://openrouter.ai/meta-llama/Llama-2-7b-chat) | 16K | $0.0001/M | $0.0002/M | Meta |
+| [Gemini Pro](https://openrouter.ai/google/gemini-pro) | 32K | $0.0001/M | $0.0002/M | Google |
+| [Claude 3 Haiku](https://openrouter.ai/anthropic/claude-3-haiku) | 200K | $0.0001/M | $0.0002/M | Anthropic |
+| [GPT-3.5 Turbo](https://openrouter.ai/openai/gpt-3.5-turbo) | 16K | $0.0001/M | $0.0002/M | OpenAI |
 """
 
 
@@ -49,8 +49,8 @@ def test_main_with_mock():
 
         print(f"✓ Parsed {len(models_data)} models from mock data")
 
-        # 週間トークン数でソート
-        models_data.sort(key=lambda x: x["weekly_tokens"], reverse=True)
+        # ランクスコアでソート
+        models_data.sort(key=lambda x: x["rank_score"], reverse=True)
 
         # 新規モデル検出
         existing_ids = db.get_all_model_ids()
@@ -83,7 +83,7 @@ def test_main_with_mock():
                 model_id=model_data["id"],
                 date=today,
                 rank=rank,
-                weekly_tokens=model_data["weekly_tokens"],
+                rank_score=model_data["rank_score"],
                 prompt_price=model_data["prompt_price"],
                 completion_price=model_data["completion_price"],
             )
@@ -97,12 +97,12 @@ def test_main_with_mock():
         print(f"✓ Previous rankings: {previous_rankings}")
 
         # トップモデルの取得
-        top_models = db.get_top_models_by_tokens(today, limit=5)
+        top_models = db.get_top_models(today, limit=5)
         print(f"✓ Top {len(top_models)} models retrieved")
 
         # モデル情報の表示
         for i, model in enumerate(top_models[:3], 1):
-            print(f"  {i}. {model['name']} - {model['weekly_tokens']}M tokens")
+            print(f"  {i}. {model['name']} - Score: {model['rank_score']}")
 
     # Discord通知のテスト
     # 環境変数 DISCORD_WEBHOOK_URL が設定されていれば優先的に使用
@@ -118,10 +118,10 @@ def test_main_with_mock():
         print("✓ New models notification sent")
 
     # サマリー通知
-    total_tokens = sum(m["weekly_tokens"] for m in models_data)
+    total_score = sum(m["rank_score"] for m in models_data)
     notifier.send_summary(
         total_models=len(models_data),
-        total_tokens=total_tokens,
+        total_tokens=total_score,
         new_models_count=len(new_models),
     )
     print("✓ Summary notification sent")
